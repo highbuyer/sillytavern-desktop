@@ -92,9 +92,28 @@ function createWindow() {
     console.error('❌ Uncaught exception in renderer:', error);
   });
 
+  // Ctrl+Shift+I 切换 DevTools
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.control && input.shift && input.key === 'I') {
+      if (mainWindow.webContents.isDevToolsOpened()) {
+        mainWindow.webContents.closeDevTools();
+      } else {
+        mainWindow.webContents.openDevTools({ mode: 'detach' });
+      }
+    }
+    // F12 也切换
+    if (input.key === 'F12') {
+      if (mainWindow.webContents.isDevToolsOpened()) {
+        mainWindow.webContents.closeDevTools();
+      } else {
+        mainWindow.webContents.openDevTools({ mode: 'detach' });
+      }
+    }
+  });
+
   mainWindow.webContents.on('did-finish-load', () => {
     console.log('Page finished loading');
-    mainWindow.webContents.openDevTools();
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
     // 执行一个简单的JavaScript测试来检查DOM
     mainWindow.webContents.executeJavaScript(`
       console.log('DOM ready, root exists:', !!document.getElementById('root'));
@@ -142,7 +161,6 @@ function createWindow() {
     
     mainWindow.show();
     mainWindow.focus();
-    mainWindow.maximize(); // 取消注释最大化
     console.log('Window bounds:', mainWindow.getBounds());
     console.log('Visible:', mainWindow.isVisible());
     console.log('Focused:', mainWindow.isFocused());
