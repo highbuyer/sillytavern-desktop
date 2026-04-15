@@ -3,6 +3,58 @@ import { useNavigate } from 'react-router-dom';
 import { useStoreState, updateSettings, resetSettings, AIProvider } from '../store/useStore';
 import { MODEL_LIST, getModelsByProvider, testConnection, AIServiceConfig, fetchModels, AIModel } from '../services/ai';
 
+// 可复用组件：模型下拉选择（带自定义输入兜底）
+const ProviderModelSelect: React.FC<{
+  provider: AIProvider;
+  models: AIModel[];
+  value: string;
+  onChange: (val: string) => void;
+}> = ({ provider, models, value, onChange }) => {
+  const providerModels = models.filter(m => m.provider === provider);
+  const isInList = providerModels.some(m => m.id === value);
+
+  if (isInList) {
+    return (
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        {providerModels.map(m => (
+          <option key={m.id} value={m.id}>
+            {m.name}
+          </option>
+        ))}
+        <option value="__custom__">自定义模型...</option>
+      </select>
+    );
+  }
+
+  // 当前值不在列表中 → 显示下拉（选中"自定义"）+ 文本输入
+  return (
+    <>
+      <select
+        value="__custom__"
+        onChange={(e) => {
+          if (e.target.value !== '__custom__') {
+            onChange(e.target.value);
+          }
+        }}
+      >
+        {providerModels.map(m => (
+          <option key={m.id} value={m.id}>
+            {m.name}
+          </option>
+        ))}
+        <option value="__custom__">自定义模型...</option>
+      </select>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="输入模型ID..."
+        style={{ marginTop: '8px' }}
+      />
+    </>
+  );
+};
+
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
   const { settings, chats, roles } = useStoreState();
@@ -358,11 +410,11 @@ const SettingsPage: React.FC = () => {
                 </div>
                 <div className="form-group">
                   <label>默认模型</label>
-                  <input
-                    type="text"
+                  <ProviderModelSelect
+                    provider={p.key}
+                    models={availableModels}
                     value={form.api[p.modelField as keyof typeof form.api] as string}
-                    onChange={(e) => updateForm('api', p.modelField, e.target.value)}
-                    placeholder="模型ID"
+                    onChange={(val) => updateForm('api', p.modelField, val)}
                   />
                 </div>
               </div>
