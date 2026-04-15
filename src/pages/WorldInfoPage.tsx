@@ -139,31 +139,69 @@ const WorldInfoPage: React.FC = () => {
       reader.onload = (event) => {
         try {
           const data = JSON.parse(event.target?.result as string);
+          let imported: any[] = [];
+
           if (Array.isArray(data)) {
-            for (const entry of data) {
-              addWorldInfoEntry({
-                keys: entry.keys || [],
-                content: entry.content || '',
-                comment: entry.comment || '',
-                enabled: entry.enabled !== false,
-                constant: entry.constant || false,
-                position: entry.position || 'before',
-                caseSensitive: entry.caseSensitive || false,
-                scanDepth: entry.scanDepth || 10,
-                order: worldInfo.length,
-              });
+            // 格式1：纯数组（自己导出的）
+            imported = data;
+          } else if (data && data.entries) {
+            // 格式2：SillyTavern 世界书 { entries: { "0": {...}, "1": {...} } }
+            const entries = data.entries;
+            if (Array.isArray(entries)) {
+              imported = entries;
+            } else if (typeof entries === 'object') {
+              imported = Object.values(entries);
             }
-            alert(`成功导入 ${data.length} 条 World Info`);
-          } else {
-            alert('文件格式不正确，需要 JSON 数组');
+          } else if (typeof data === 'object') {
+            // 格式3：其他对象格式，尝试作为单条目或 entries 直接取值
+            if (data.key || data.keys || data.content) {
+              imported = [data];
+            } else {
+              imported = Object.values(data).filter((e: any) => e && typeof e === 'object' && e.content);
+            }
           }
-        } catch {
-          alert('导入失败：无法解析文件');
+
+          if (imported.length === 0) {
+            alert('文件中没有找到有效的 World Info 条目');
+            return;
+          }
+
+          let count = 0;
+          for (const entry of imported) {
+            // SillyTavern 格式字段映射
+            const keys = entry.key || entry.keys || [];
+            const keyArray = Array.isArray(keys) ? keys : (typeof keys === 'string' ? keys.split(',').map((k: string) => k.trim()).filter(Boolean) : []);
+
+            addWorldInfoEntry({
+              keys: keyArray,
+              content: entry.content || '',
+              comment: entry.comment || entry.name || '',
+              // SillyTavern 用 disable=true 表示禁用，我们用 enabled
+              enabled: entry.disable === true ? false : (entry.enabled !== false),
+              constant: entry.constant || false,
+              position: mapPosition(entry.position),
+              caseSensitive: entry.caseSensitive || false,
+              scanDepth: entry.scanDepth || entry.depth || 10,
+              order: entry.order ?? entry.displayIndex ?? worldInfo.length,
+            });
+            count++;
+          }
+          alert(`成功导入 ${count} 条 World Info`);
+        } catch (err: any) {
+          alert('导入失败：无法解析文件\n' + err.message);
         }
       };
       reader.readAsText(file);
     };
     input.click();
+  };
+
+  // SillyTavern position 数字映射到我们的 before/after
+  const mapPosition = (pos: any): 'before' | 'after' => {
+    if (typeof pos === 'string') return pos === 'after' ? 'after' : 'before';
+    // SillyTavern: 0=before_char_def, 1=after_char_def, 2=before_example_msg, 3=after_example_msg, 4=AN
+    if (pos === undefined || pos === null) return 'before';
+    return pos <= 1 ? 'before' : 'after';
   };
 
   return (
