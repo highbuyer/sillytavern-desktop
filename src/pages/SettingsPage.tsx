@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useStoreState, updateSettings, resetSettings } from '../store/useStore';
+import { useStoreState, updateSettings, resetSettings, AIProvider } from '../store/useStore';
+import { MODEL_LIST, getModelsByProvider, testConnection, AIServiceConfig } from '../services/ai';
 
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
-  const { settings } = useStoreState();
+  const { settings, chats, roles } = useStoreState();
   const [form, setForm] = useState(settings);
   const [activeTab, setActiveTab] = useState<'api' | 'generation' | 'ui' | 'storage'>('api');
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   useEffect(() => {
     setForm(settings);
@@ -67,125 +70,201 @@ const SettingsPage: React.FC = () => {
     }));
   };
 
+  const handleProviderChange = (provider: AIProvider) => {
+    const models = getModelsByProvider(provider);
+    const defaultModel = models[0]?.id || '';
+    setForm(prev => ({
+      ...prev,
+      api: {
+        ...prev.api,
+        activeProvider: provider,
+        activeModel: defaultModel,
+      },
+    }));
+  };
+
+  const handleTestConnection = async () => {
+    setTesting(true);
+    setTestResult(null);
+
+    const config: AIServiceConfig = {
+      provider: form.api.activeProvider,
+      model: form.api.activeModel,
+      apiKey: form.api[`${form.api.activeProvider}Key` as keyof typeof form.api] as string,
+      apiUrl: form.api[`${form.api.activeProvider}Url` as keyof typeof form.api] as string,
+      temperature: form.generation.temperature,
+      maxTokens: 100,
+    };
+
+    try {
+      const result = await testConnection(config);
+      setTestResult(result);
+    } catch (error: any) {
+      setTestResult({ success: false, message: error.message });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const providerConfig: { key: AIProvider; label: string; keyField: string; urlField: string; modelField: string; urlPlaceholder: string; keyPlaceholder: string }[] = [
+    { key: 'openai', label: 'OpenAI', keyField: 'openaiKey', urlField: 'openaiUrl', modelField: 'openaiModel', urlPlaceholder: 'https://api.openai.com/v1', keyPlaceholder: 'sk-...' },
+    { key: 'claude', label: 'Anthropic (Claude)', keyField: 'claudeKey', urlField: 'claudeUrl', modelField: 'claudeModel', urlPlaceholder: 'https://api.anthropic.com/v1', keyPlaceholder: 'sk-ant-...' },
+    { key: 'ollama', label: 'Ollama', keyField: '', urlField: 'ollamaUrl', modelField: 'ollamaModel', urlPlaceholder: 'http://localhost:11434', keyPlaceholder: '' },
+    { key: 'openrouter', label: 'OpenRouter', keyField: 'openrouterKey', urlField: 'openrouterUrl', modelField: 'openrouterModel', urlPlaceholder: 'https://openrouter.ai/api/v1', keyPlaceholder: 'sk-or-...' },
+  ];
+
   return (
     <div className="settings-page">
       <div className="page-header">
         <h1>设置</h1>
         <div className="page-actions">
           <button className="btn-primary" onClick={handleSave}>
-            💾 保存设置
+            保存设置
           </button>
           <button className="btn-secondary" onClick={() => navigate('/')}>
-            ← 返回
+            返回
           </button>
         </div>
       </div>
 
       <div className="settings-tabs">
-        <button 
+        <button
           className={`tab ${activeTab === 'api' ? 'active' : ''}`}
           onClick={() => setActiveTab('api')}
         >
-          🌐 API配置
+          API配置
         </button>
-        <button 
+        <button
           className={`tab ${activeTab === 'generation' ? 'active' : ''}`}
           onClick={() => setActiveTab('generation')}
         >
-          ⚙️ 生成参数
+          生成参数
         </button>
-        <button 
+        <button
           className={`tab ${activeTab === 'ui' ? 'active' : ''}`}
           onClick={() => setActiveTab('ui')}
         >
-          🎨 界面设置
+          界面设置
         </button>
-        <button 
+        <button
           className={`tab ${activeTab === 'storage' ? 'active' : ''}`}
           onClick={() => setActiveTab('storage')}
         >
-          💾 存储设置
+          存储设置
         </button>
       </div>
 
       <div className="settings-content">
         {activeTab === 'api' && (
           <div className="settings-section">
-            <h3>OpenAI</h3>
+            {/* 后端选择 */}
             <div className="form-group">
-              <label>API密钥</label>
-              <input
-                type="password"
-                value={form.api.openaiKey}
-                onChange={(e) => updateForm('api', 'openaiKey', e.target.value)}
-                placeholder="sk-..."
-              />
-            </div>
-            <div className="form-group">
-              <label>API地址</label>
-              <input
-                type="text"
-                value={form.api.openaiUrl}
-                onChange={(e) => updateForm('api', 'openaiUrl', e.target.value)}
-                placeholder="https://api.openai.com/v1"
-              />
+              <label>当前使用的后端</label>
+              <select
+                value={form.api.activeProvider}
+                onChange={(e) => handleProviderChange(e.target.value as AIProvider)}
+              >
+                {providerConfig.map(p => (
+                  <option key={p.key} value={p.key}>{p.label}</option>
+                ))}
+              </select>
+              <div className="hint">选择默认使用的 AI 后端，可在聊天中切换</div>
             </div>
 
-            <h3>Anthropic (Claude)</h3>
+            {/* 模型选择 */}
             <div className="form-group">
-              <label>API密钥</label>
-              <input
-                type="password"
-                value={form.api.claudeKey}
-                onChange={(e) => updateForm('api', 'claudeKey', e.target.value)}
-                placeholder="sk-ant-..."
-              />
-            </div>
-            <div className="form-group">
-              <label>API地址</label>
-              <input
-                type="text"
-                value={form.api.claudeUrl}
-                onChange={(e) => updateForm('api', 'claudeUrl', e.target.value)}
-                placeholder="https://api.anthropic.com/v1"
-              />
-            </div>
-
-            <h3>Ollama</h3>
-            <div className="form-group">
-              <label>API地址</label>
-              <input
-                type="text"
-                value={form.api.ollamaUrl}
-                onChange={(e) => updateForm('api', 'ollamaUrl', e.target.value)}
-                placeholder="http://localhost:11434"
-              />
+              <label>当前模型</label>
+              <div className="model-selector">
+                <select
+                  value={form.api.activeModel}
+                  onChange={(e) => updateForm('api', 'activeModel', e.target.value)}
+                >
+                  {getModelsByProvider(form.api.activeProvider).map(m => (
+                    <option key={m.id} value={m.id}>{m.name} (ctx: {m.maxContext?.toLocaleString() || '?'})</option>
+                  ))}
+                  <option value="__custom__">自定义模型...</option>
+                </select>
+                {form.api.activeModel === '__custom__' && (
+                  <input
+                    type="text"
+                    value=""
+                    onChange={(e) => updateForm('api', 'activeModel', e.target.value)}
+                    placeholder="输入模型ID..."
+                    style={{ marginTop: '8px' }}
+                  />
+                )}
+              </div>
             </div>
 
-            <h3>OpenRouter</h3>
+            <div className="settings-divider" />
+
+            {/* 各后端配置 */}
+            {providerConfig.map(p => (
+              <div key={p.key} className={`provider-config ${form.api.activeProvider === p.key ? 'active' : ''}`}>
+                <h3 className="provider-header">
+                  {p.label}
+                  {form.api.activeProvider === p.key && (
+                    <span className="active-badge">当前使用</span>
+                  )}
+                </h3>
+                {p.keyField && (
+                  <div className="form-group">
+                    <label>API密钥</label>
+                    <input
+                      type="password"
+                      value={form.api[p.keyField as keyof typeof form.api] as string}
+                      onChange={(e) => updateForm('api', p.keyField, e.target.value)}
+                      placeholder={p.keyPlaceholder}
+                    />
+                  </div>
+                )}
+                <div className="form-group">
+                  <label>API地址</label>
+                  <input
+                    type="text"
+                    value={form.api[p.urlField as keyof typeof form.api] as string}
+                    onChange={(e) => updateForm('api', p.urlField, e.target.value)}
+                    placeholder={p.urlPlaceholder}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>默认模型</label>
+                  <input
+                    type="text"
+                    value={form.api[p.modelField as keyof typeof form.api] as string}
+                    onChange={(e) => updateForm('api', p.modelField, e.target.value)}
+                    placeholder="模型ID"
+                  />
+                </div>
+              </div>
+            ))}
+
+            {/* 连接测试 */}
             <div className="form-group">
-              <label>API密钥</label>
-              <input
-                type="password"
-                value={form.api.openrouterKey}
-                onChange={(e) => updateForm('api', 'openrouterKey', e.target.value)}
-                placeholder="sk-or-..."
-              />
-            </div>
-            <div className="form-group">
-              <label>API地址</label>
-              <input
-                type="text"
-                value={form.api.openrouterUrl}
-                onChange={(e) => updateForm('api', 'openrouterUrl', e.target.value)}
-                placeholder="https://openrouter.ai/api/v1"
-              />
+              <h3>连接测试</h3>
+              <div className="test-connection-area">
+                <button
+                  className="btn-secondary"
+                  onClick={handleTestConnection}
+                  disabled={testing}
+                >
+                  {testing ? '测试中...' : '测试当前后端连接'}
+                </button>
+                {testResult && (
+                  <div className={`test-result ${testResult.success ? 'success' : 'error'}`}>
+                    {testResult.message}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
 
         {activeTab === 'generation' && (
           <div className="settings-section">
+            <h3>默认生成参数</h3>
+            <div className="hint">这些参数可在角色设置中单独覆盖</div>
+
             <div className="form-group">
               <label>
                 温度: {form.generation.temperature}
@@ -206,7 +285,7 @@ const SettingsPage: React.FC = () => {
               <input
                 type="number"
                 min="100"
-                max="8000"
+                max="32000"
                 step="100"
                 value={form.generation.maxTokens}
                 onChange={(e) => updateForm('generation', 'maxTokens', parseInt(e.target.value))}
@@ -349,13 +428,13 @@ const SettingsPage: React.FC = () => {
               <h3>数据管理</h3>
               <div className="button-group">
                 <button className="btn-secondary" onClick={handleExport}>
-                  💾 导出所有数据
+                  导出所有数据
                 </button>
                 <button className="btn-secondary" onClick={handleImport}>
-                  📥 导入数据
+                  导入数据
                 </button>
                 <button className="btn-danger" onClick={handleReset}>
-                  🔄 重置所有设置
+                  重置所有设置
                 </button>
               </div>
             </div>
@@ -363,9 +442,9 @@ const SettingsPage: React.FC = () => {
             <div className="form-group">
               <h3>存储状态</h3>
               <div className="storage-info">
-                <p>聊天记录: {JSON.stringify(useStore.getState().chats).length} 字节</p>
-                <p>角色数据: {JSON.stringify(useStore.getState().roles).length} 字节</p>
-                <p>设置数据: {JSON.stringify(useStore.getState().settings).length} 字节</p>
+                <p>聊天记录: {JSON.stringify(chats).length} 字节</p>
+                <p>角色数据: {JSON.stringify(roles).length} 字节</p>
+                <p>设置数据: {JSON.stringify(settings).length} 字节</p>
               </div>
             </div>
           </div>

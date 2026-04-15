@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useStoreState, updateChat, deleteChat } from '../store/useStore';
+import { useStoreState, addChat, updateChat, deleteChat } from '../store/useStore';
 
 interface ContextMenu {
   x: number;
@@ -64,9 +64,7 @@ const ChatList: React.FC = () => {
   };
 
   const handleNewChat = () => {
-    const newChatId = Date.now();
-    updateChat(newChatId, {
-      id: newChatId,
+    const newChatId = addChat({
       name: '新聊天',
       avatar: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><circle cx="20" cy="20" r="18" fill="#4CAF50"/></svg>',
       lastMessage: '',
@@ -74,8 +72,6 @@ const ChatList: React.FC = () => {
       msgs: [],
       starred: false,
       tags: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
     });
     navigate(`/chat/${newChatId}`);
   };

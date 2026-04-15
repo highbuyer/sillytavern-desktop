@@ -36,15 +36,23 @@ export type Role = {
   createdAt: string;
 };
 
+export type AIProvider = 'openai' | 'claude' | 'ollama' | 'openrouter';
+
 export type Settings = {
   api: {
+    activeProvider: AIProvider;
+    activeModel: string;
     openaiKey: string;
     openaiUrl: string;
+    openaiModel: string;
     claudeKey: string;
     claudeUrl: string;
+    claudeModel: string;
     ollamaUrl: string;
+    ollamaModel: string;
     openrouterKey: string;
     openrouterUrl: string;
+    openrouterModel: string;
   };
   generation: {
     temperature: number;
@@ -74,13 +82,19 @@ const mockAvatars = [
 
 const defaultSettings: Settings = {
   api: {
+    activeProvider: 'openai',
+    activeModel: 'gpt-4o-mini',
     openaiKey: '',
     openaiUrl: 'https://api.openai.com/v1',
+    openaiModel: 'gpt-4o-mini',
     claudeKey: '',
     claudeUrl: 'https://api.anthropic.com/v1',
+    claudeModel: 'claude-3-5-sonnet-20241022',
     ollamaUrl: 'http://localhost:11434',
+    ollamaModel: 'llama3',
     openrouterKey: '',
     openrouterUrl: 'https://openrouter.ai/api/v1',
+    openrouterModel: 'openrouter/auto',
   },
   generation: {
     temperature: 0.7,
@@ -196,7 +210,7 @@ const createStore = () => {
   const subscribe = (fn: (state: any) => void) => {
     subscribers.add(fn);
     fn(state);
-    return () => subscribers.delete(fn);
+    return () => { subscribers.delete(fn); };
   };
 
   const notify = () => {
@@ -254,6 +268,33 @@ const createStore = () => {
         chat.msgs.push(newMessage);
         chat.lastMessage = content;
         chat.unread = isUser ? chat.unread : chat.unread + 1;
+        chat.updatedAt = new Date().toISOString();
+        notify();
+        return newMessage.id;
+      }
+      return null;
+    },
+
+    updateMessage: (chatId: number, messageId: number, content: string) => {
+      const chat = state.chats.find((c) => c.id === chatId);
+      if (chat) {
+        const msg = chat.msgs.find(m => m.id === messageId);
+        if (msg) {
+          msg.content = content;
+          // 更新 lastMessage（如果是最后一条消息）
+          if (chat.msgs[chat.msgs.length - 1]?.id === messageId) {
+            chat.lastMessage = content.substring(0, 100);
+          }
+          chat.updatedAt = new Date().toISOString();
+          notify();
+        }
+      }
+    },
+
+    deleteMessage: (chatId: number, messageId: number) => {
+      const chat = state.chats.find((c) => c.id === chatId);
+      if (chat) {
+        chat.msgs = chat.msgs.filter(m => m.id !== messageId);
         chat.updatedAt = new Date().toISOString();
         notify();
       }
@@ -320,7 +361,7 @@ const createStore = () => {
 };
 
 const store = createStore();
-export const { subscribe, getState, addChat, updateChat, deleteChat, addMessage, markRead, addRole, updateRole, deleteRole, updateSettings, resetSettings, exportData, importData } = store;
+export const { subscribe, getState, addChat, updateChat, deleteChat, addMessage, updateMessage, deleteMessage, markRead, addRole, updateRole, deleteRole, updateSettings, resetSettings, exportData, importData } = store;
 
 // 兼容旧版API
 export const messages = {

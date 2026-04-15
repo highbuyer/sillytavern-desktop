@@ -1068,15 +1068,208 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   .app {
     flex-direction: column;
   }
-  
+
   .sidebar {
     width: 100%;
     height: 200px;
     border-right: none;
     border-bottom: 1px solid var(--border);
   }
-  
+
   .main-content {
     height: calc(100vh - 200px);
   }
+}
+
+/* 输入区域（含停止按钮） */
+.input-area {
+  background: var(--card);
+  border-top: 1px solid var(--border);
+}
+
+.btn-stop {
+  display: block;
+  width: calc(100% - 32px);
+  margin: 8px 16px 0 16px;
+  padding: 8px;
+  background: rgba(244, 67, 54, 0.15);
+  color: var(--danger);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.btn-stop:hover {
+  background: rgba(244, 67, 54, 0.25);
+}
+
+/* 流式消息样式 */
+.message-bubble.streaming {
+  border: 1px solid rgba(91, 63, 217, 0.3);
+}
+
+.message-bubble.streaming .message-content::after {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 14px;
+  background: var(--accent);
+  margin-left: 2px;
+  animation: cursor-blink 1s infinite;
+  vertical-align: middle;
+}
+
+@keyframes cursor-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.streaming-badge {
+  font-size: 11px;
+  color: var(--accent);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* 消息编辑 */
+.message-edit-area {
+  margin-top: 8px;
+}
+
+.message-edit-input {
+  width: 100%;
+  min-height: 60px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 10px;
+  font-family: inherit;
+  font-size: 14px;
+  resize: vertical;
+  outline: none;
+}
+
+.message-edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  justify-content: flex-end;
+}
+
+.btn-sm {
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+/* 代码块样式 */
+.message-content pre {
+  background: rgba(0, 0, 0, 0.4);
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.message-content pre code {
+  background: none;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* 设置页面增强 */
+.settings-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 24px 0;
+}
+
+.provider-config {
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+  margin-bottom: 16px;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+}
+
+.provider-config.active {
+  background: rgba(91, 63, 217, 0.05);
+  border-color: rgba(91, 63, 217, 0.2);
+}
+
+.provider-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 16px 0 !important;
+  font-size: 15px;
+}
+
+.active-badge {
+  font-size: 11px;
+  background: rgba(91, 63, 217, 0.2);
+  color: var(--accent);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: normal;
+}
+
+.model-selector select {
+  width: 100%;
+}
+
+.test-connection-area {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.test-result {
+  padding: 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.test-result.success {
+  background: rgba(76, 175, 80, 0.1);
+  color: var(--success);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.test-result.error {
+  background: rgba(244, 67, 54, 0.1);
+  color: var(--danger);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+/* Chat 时间显示 */
+.chat-time {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+/* 消息内容增强 */
+.message-content pre {
+  background: rgba(0, 0, 0, 0.4);
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.message-content pre code {
+  background: none;
+  padding: 0;
 }

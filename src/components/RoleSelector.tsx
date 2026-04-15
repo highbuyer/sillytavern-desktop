@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import useStore from '../store/useStore';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useStoreState } from '../store/useStore';
 
 interface RoleSelectorProps {
   selectedRoleId: number;
@@ -8,7 +9,8 @@ interface RoleSelectorProps {
 
 const RoleSelector: React.FC<RoleSelectorProps> = ({ selectedRoleId, onRoleChange }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const { roles } = useStore.getState();
+  const { roles } = useStoreState();
+  const navigate = useNavigate();
   const selectedRole = roles.find(r => r.id === selectedRoleId) || roles[0];
 
   const handleRoleSelect = (roleId: number) => {
@@ -51,8 +53,8 @@ const RoleSelector: React.FC<RoleSelectorProps> = ({ selectedRoleId, onRoleChang
             ))}
           </div>
           <div className="role-dropdown-footer">
-            <button className="btn-link" onClick={() => window.location.href = '/roles'}>
-              🛠️ 管理角色
+            <button className="btn-link" onClick={(e) => { e.stopPropagation(); navigate('/roles'); }}>
+              管理角色
             </button>
           </div>
         </div>
