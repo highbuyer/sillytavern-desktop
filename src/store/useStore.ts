@@ -286,10 +286,22 @@ const defaultWorldInfo: WorldInfoEntry[] = [];
 const createStore = () => {
   const subscribers = new Set<(state: any) => void>();
   
+  // 加载设置后，深度合并默认值，确保新增字段不会因旧数据缺失而 undefined
+  const loadedSettings = loadFromStorage<Settings>('sillytavern-settings', defaultSettings);
+  const mergedSettings: Settings = {
+    ...defaultSettings,
+    ...loadedSettings,
+    api: { ...defaultSettings.api, ...(loadedSettings.api || {}) },
+    generation: { ...defaultSettings.generation, ...(loadedSettings.generation || {}) },
+    ui: { ...defaultSettings.ui, ...(loadedSettings.ui || {}) },
+    storage: { ...defaultSettings.storage, ...(loadedSettings.storage || {}) },
+    worldInfo: { ...defaultSettings.worldInfo, ...(loadedSettings.worldInfo || {}) },
+  };
+
   let state = {
     chats: loadFromStorage<Chat[]>('sillytavern-chats', initialChats),
     roles: loadFromStorage<Role[]>('sillytavern-roles', defaultRoles),
-    settings: loadFromStorage<Settings>('sillytavern-settings', defaultSettings),
+    settings: mergedSettings,
     worldInfo: loadFromStorage<WorldInfoEntry[]>('sillytavern-worldinfo', defaultWorldInfo),
     worldInfoSettings: loadFromStorage<WorldInfoSettings>('sillytavern-worldinfo-settings', defaultWorldInfoSettings),
   };

@@ -171,6 +171,12 @@ const SettingsPage: React.FC = () => {
     console.log('当前后端:', provider);
     console.log('密钥字段:', keyField);
     console.log('URL字段:', urlField);
+
+    // provider 未定义时直接返回，避免无效请求和无限循环
+    if (!provider) {
+      console.warn('activeProvider 未定义，跳过获取模型');
+      return;
+    }
     
     // 检查是否需要API密钥
     if (keyField) {
