@@ -659,6 +659,7 @@ const WorldInfoPage: React.FC = () => {
           if (!imported.length) { alert('未找到有效条目'); return; }
           let count = 0;
           for (const entry of imported) {
+            const ext = entry.extensions || {};
             const keys = entry.key || entry.keys || [];
             const keyArray = Array.isArray(keys) ? keys : typeof keys === 'string' ? keys.split(',').map((k: string) => k.trim()).filter(Boolean) : [];
             const secKeys = entry.keysecondary || entry.secondary_keys || entry.secondaryKeys || [];
@@ -670,13 +671,20 @@ const WorldInfoPage: React.FC = () => {
               enabled: entry.disable === true ? false : (entry.enabled !== false),
               constant: entry.constant || false, position: mapPosition(entry.position),
               order: entry.order ?? entry.displayIndex ?? worldInfo.length,
-              depth: entry.depth || 0, caseSensitive: entry.caseSensitive || false,
-              scanDepth: entry.scanDepth || entry.depth || 10,
-              useProbability: entry.useProbability || false, probability: entry.probability ?? 100,
-              preventRecursion: entry.preventRecursion || false, excludeRecursion: entry.excludeRecursion || false,
-              cooldown: entry.cooldown || 0, delay: entry.delay || 0,
-              group: entry.group || '', groupOverride: entry.groupOverride || false,
-              groupWeight: entry.groupWeight || 100, scanRole: null, role: null, tokenBudget: entry.tokenBudget || 0,
+              depth: entry.depth || ext.depth || 0,
+              caseSensitive: entry.caseSensitive || ext.case_sensitive || false,
+              scanDepth: entry.scanDepth || ext.scan_depth || 10,
+              useProbability: entry.useProbability || ext.useProbability || false,
+              probability: entry.probability ?? ext.probability ?? 100,
+              preventRecursion: entry.preventRecursion || ext.prevent_recursion || false,
+              excludeRecursion: entry.excludeRecursion || ext.exclude_recursion || false,
+              cooldown: entry.cooldown || ext.cooldown || 0,
+              delay: entry.delay || ext.delay || 0,
+              group: entry.group || ext.group || '',
+              groupOverride: entry.groupOverride || ext.group_override || false,
+              groupWeight: entry.groupWeight || ext.group_weight || 100,
+              tokenBudget: entry.tokenBudget || 0,
+              scanRole: null, role: null,
             });
             count++;
           }
