@@ -230,6 +230,9 @@ const WorldInfoPage: React.FC = () => {
   const [editingEntry, setEditingEntry] = useState<WorldInfoEntry | null>(null);
   const [showNewForm, setShowNewForm] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  // 分组管理状态
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [activeGroupFilter, setActiveGroupFilter] = useState<string>('__all__');
 
   const { worldInfo, worldInfoSettings } = useStoreState();
 
@@ -289,8 +292,25 @@ const WorldInfoPage: React.FC = () => {
     tokenBudget: 0,
   });
 
-  const sortedEntries = [...worldInfo]
-    .filter(entry => {
+  // 收集所有分组名称（用于筛选标签）
+  const allGroups = React.useMemo(() => {
+    const groupSet = new Set<string>();
+    worldInfo.forEach(entry => {
+      if (entry.group && entry.group.trim()) groupSet.add(entry.group.trim());
+    });
+    return Array.from(groupSet).sort();
+  }, [worldInfo]);
+
+  // 过滤后的条目
+  const sortedEntries = React.useMemo(() => {
+    let entries = [...worldInfo].filter(entry => {
+      // 分组筛选
+      if (activeGroupFilter === '__ungrouped__') {
+        if (entry.group && entry.group.trim()) return false;
+      } else if (activeGroupFilter !== '__all__') {
+        if (!entry.group || entry.group.trim() !== activeGroupFilter) return false;
+      }
+      // 搜索过滤
       if (!searchQuery) return true;
       const q = searchQuery.toLowerCase();
       return (
@@ -298,8 +318,43 @@ const WorldInfoPage: React.FC = () => {
         entry.content.toLowerCase().includes(q) ||
         entry.comment.toLowerCase().includes(q)
       );
-    })
-    .sort((a, b) => a.order - b.order);
+    });
+    return entries.sort((a, b) => a.order - b.order);
+  }, [worldInfo, activeGroupFilter, searchQuery]);
+
+  // 按分组组织条目
+  const groupedEntries = React.useMemo(() => {
+    const groups: { [groupName: string]: WorldInfoEntry[] } = {};
+    sortedEntries.forEach(entry => {
+      const groupName = entry.group && entry.group.trim() ? entry.group.trim() : '__ungrouped__';
+      if (!groups[groupName]) groups[groupName] = [];
+      groups[groupName].push(entry);
+    });
+    return groups;
+  }, [sortedEntries]);
+
+  const toggleGroupCollapse = (groupName: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupName)) {
+        next.delete(groupName);
+      } else {
+        next.add(groupName);
+      }
+      return next;
+    });
+  };
+
+  const handleQuickAssignGroup = (entry: WorldInfoEntry, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const currentGroup = entry.group || '';
+    const newGroup = window.prompt(
+      `设置条目分组\n当前分组: ${currentGroup || '（无）'}\n输入新分组名称（留空则移除分组）:`,
+      currentGroup
+    );
+    if (newGroup === null) return; // 用户取消
+    updateWorldInfoEntry(entry.id, { group: newGroup.trim() });
+  };
 
   const handleCreate = () => {
     if (!newForm.content.trim()) return;
@@ -436,9 +491,59 @@ const WorldInfoPage: React.FC = () => {
     }
   };
 
+  // SillyTavern position 数字映射到新的 WIPosition
+  const mapPositionToST = (pos: string): number => {
+    const map: Record<string, number> = {
+      'before_char': 0,
+      'after_char': 1,
+      'before_example': 2,
+      'after_example': 3,
+      'before_last': 4,
+      'after_last': 4, // ST uses 4 for AN position too
+      'before': 0,  // backward compat
+      'after': 4,
+    };
+    return map[pos] ?? 0;
+  };
+
   const handleExport = () => {
-    const data = JSON.stringify(worldInfo, null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
+    // Export in SillyTavern world book format
+    const entriesObj: Record<string, any> = {};
+    worldInfo.forEach((entry, index) => {
+      entriesObj[String(index)] = {
+        uid: entry.id,
+        displayIndex: entry.order,
+        name: entry.name || '',
+        comment: entry.comment || '',
+        keys: entry.keys,
+        keysecondary: entry.secondaryKeys || [],
+        selectiveLogic: entry.selectiveLogic === 'AND' ? 1 : 0,
+        content: entry.content,
+        constant: entry.constant,
+        selective: (entry.secondaryKeys || []).length > 0,
+        disable: !entry.enabled,
+        position: mapPositionToST(entry.position),
+        depth: entry.depth || entry.scanDepth || 4,
+        order: entry.order,
+        caseSensitive: entry.caseSensitive || null,
+        scanDepth: entry.scanDepth || null,
+        useProbability: entry.useProbability,
+        probability: entry.probability,
+        preventRecursion: entry.preventRecursion,
+        excludeRecursion: entry.excludeRecursion,
+        delay: entry.delay || null,
+        cooldown: entry.cooldown || null,
+        group: entry.group || '',
+        groupOverride: entry.groupOverride || false,
+        groupWeight: entry.groupWeight || 100,
+        tokenBudget: entry.tokenBudget || null,
+        characterFilter: entry.role ? { isExclude: false, names: [], tags: [] } : undefined,
+      };
+    });
+
+    const exportData = { entries: entriesObj };
+    const json = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -491,32 +596,35 @@ const WorldInfoPage: React.FC = () => {
             const keys = entry.key || entry.keys || [];
             const keyArray = Array.isArray(keys) ? keys : (typeof keys === 'string' ? keys.split(',').map((k: string) => k.trim()).filter(Boolean) : []);
 
+            const secKeys = entry.keysecondary || entry.secondary_keys || entry.secondaryKeys || [];
+            const secondaryKeyArray = Array.isArray(secKeys)
+              ? secKeys
+              : (typeof secKeys === 'string' ? secKeys.split(',').map((k: string) => k.trim()).filter(Boolean) : []);
+
             addWorldInfoEntry({
               keys: keyArray,
-              secondaryKeys: entry.secondary_keys ?
-                (Array.isArray(entry.secondary_keys) ? entry.secondary_keys : String(entry.secondary_keys).split(',').map((k: string) => k.trim()).filter(Boolean)) :
-                [],
-              selectiveLogic: entry.selectiveLogic === 'AND' ? 'AND' : 'OR',
+              secondaryKeys: secondaryKeyArray,
+              selectiveLogic: entry.selectiveLogic === 1 || entry.selectiveLogic === 'AND' ? 'AND' : 'OR',
               content: entry.content || '',
-              comment: entry.comment || entry.name || '',
-              name: entry.name || '',
+              comment: entry.comment || '',
+              name: entry.name || entry.comment || '',
               enabled: entry.disable === true ? false : (entry.enabled !== false),
               constant: entry.constant || false,
               position: mapPosition(entry.position),
-              caseSensitive: entry.caseSensitive || false,
-              scanDepth: entry.scanDepth || entry.depth || 10,
               order: entry.order ?? entry.displayIndex ?? worldInfo.length,
               depth: entry.depth || 0,
+              caseSensitive: entry.caseSensitive || false,
+              scanDepth: entry.scanDepth || entry.depth || 10,
               useProbability: entry.useProbability || false,
-              probability: entry.probability || 100,
+              probability: entry.probability ?? 100,
               preventRecursion: entry.preventRecursion || false,
               excludeRecursion: entry.excludeRecursion || false,
               cooldown: entry.cooldown || 0,
               delay: entry.delay || 0,
-              group: entry.group || '',
-              groupOverride: entry.groupOverride || false,
-              groupWeight: entry.groupWeight || 100,
-              scanRole: null,
+              group: entry.group || entry.extra?.group || '',
+              groupOverride: entry.groupOverride || entry.extra?.groupOverride || false,
+              groupWeight: entry.groupWeight || entry.extra?.groupWeight || 100,
+              scanRole: null,  // Can't map from ST format
               role: null,
               tokenBudget: entry.tokenBudget || 0,
             });
@@ -534,7 +642,7 @@ const WorldInfoPage: React.FC = () => {
 
   // SillyTavern position 数字映射到新的 WIPosition
   const mapPosition = (pos: any): WIPosition => {
-    if (!pos) return 'before_char';
+    if (!pos && pos !== 0) return 'before_char';
     const newPositions: WIPosition[] = [
       'before_char', 'after_char', 'before_example',
       'after_example', 'before_last', 'after_last',
@@ -599,6 +707,31 @@ const WorldInfoPage: React.FC = () => {
             <span className="stat-constant"> ({worldInfo.filter(e => e.constant).length} 常驻)</span>
           )}
         </div>
+      </div>
+
+      {/* 分组筛选标签 */}
+      <div className="worldinfo-group-tabs">
+        <button
+          className={`wi-group-tab ${activeGroupFilter === '__all__' ? 'active' : ''}`}
+          onClick={() => setActiveGroupFilter('__all__')}
+        >
+          全部
+        </button>
+        <button
+          className={`wi-group-tab ${activeGroupFilter === '__ungrouped__' ? 'active' : ''}`}
+          onClick={() => setActiveGroupFilter('__ungrouped__')}
+        >
+          未分组
+        </button>
+        {allGroups.map(group => (
+          <button
+            key={group}
+            className={`wi-group-tab ${activeGroupFilter === group ? 'active' : ''}`}
+            onClick={() => setActiveGroupFilter(group)}
+          >
+            {group}
+          </button>
+        ))}
       </div>
 
       {/* 新建条目表单 */}
@@ -782,7 +915,7 @@ const WorldInfoPage: React.FC = () => {
         </div>
       )}
 
-      {/* 条目列表 */}
+      {/* 条目列表（按分组显示） */}
       <div className="worldinfo-list">
         {sortedEntries.length === 0 && !showNewForm && (
           <div className="empty-state">
@@ -794,117 +927,166 @@ const WorldInfoPage: React.FC = () => {
           </div>
         )}
 
-        {sortedEntries.map((entry) => (
-          <div
-            key={entry.id}
-            className={`worldinfo-entry ${!entry.enabled ? 'disabled' : ''} ${expandedId === entry.id ? 'expanded' : ''}`}
-          >
-            <div
-              className="worldinfo-entry-header"
-              onClick={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
-            >
-              <div className="entry-toggle-area">
-                <span className="entry-expand-icon">{expandedId === entry.id ? '▼' : '▶'}</span>
-                <div className="entry-key-badges">
-                  {entry.keys.slice(0, 5).map((key, i) => (
-                    <span key={i} className="entry-key-badge">{key}</span>
-                  ))}
-                  {entry.keys.length > 5 && (
-                    <span className="entry-key-badge more">+{entry.keys.length - 5}</span>
-                  )}
-                </div>
-              </div>
-              <div className="entry-meta">
-                {entry.constant && <span className="entry-badge constant">常驻</span>}
-                <span className="entry-badge position">{positionLabels[entry.position] || entry.position}</span>
-                <span className="entry-comment">{entry.comment || '无备注'}</span>
-              </div>
-              <div className="entry-actions" onClick={(e) => e.stopPropagation()}>
-                <button
-                  className={`btn-icon ${entry.enabled ? 'enabled' : ''}`}
-                  onClick={() => handleToggle(entry)}
-                  title={entry.enabled ? '禁用' : '启用'}
-                >
-                  {entry.enabled ? 'ON' : 'OFF'}
-                </button>
-                <button className="btn-icon" onClick={() => handleStartEdit(entry)} title="编辑">✏️</button>
-                <button className="btn-icon delete" onClick={() => handleDelete(entry.id)} title="删除">🗑️</button>
-              </div>
-            </div>
+        {/* 按分组渲染条目 */}
+        {Object.entries(groupedEntries)
+          .sort(([a], [b]) => {
+            // 未分组排最后
+            if (a === '__ungrouped__') return 1;
+            if (b === '__ungrouped__') return -1;
+            return a.localeCompare(b);
+          })
+          .map(([groupName, entries]) => {
+            const isUngrouped = groupName === '__ungrouped__';
+            const displayName = isUngrouped ? '未分组' : groupName;
+            const isCollapsed = collapsedGroups.has(groupName);
 
-            {expandedId === entry.id && (
-              <div className="worldinfo-entry-body">
-                <div className="entry-section">
-                  <span className="entry-label">内容:</span>
-                  <pre className="entry-content-preview">{entry.content}</pre>
+            return (
+              <div key={groupName} className="wi-group-section">
+                {/* 分组头 */}
+                <div
+                  className="wi-group-header"
+                  onClick={() => toggleGroupCollapse(groupName)}
+                >
+                  <span className="wi-group-collapse-icon">{isCollapsed ? '▶' : '▼'}</span>
+                  <span className="wi-group-name">{displayName}</span>
+                  <span className="wi-group-count">{entries.length} 条</span>
                 </div>
-                <div className="entry-section">
-                  <span className="entry-label">关键词:</span>
-                  <div className="entry-keys-list">
-                    {entry.keys.map((key, i) => (
-                      <span key={i} className="entry-key-badge">{key}</span>
+
+                {/* 分组内条目 */}
+                {!isCollapsed && (
+                  <div className="wi-group-entries">
+                    {entries.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className={`worldinfo-entry ${!entry.enabled ? 'disabled' : ''} ${expandedId === entry.id ? 'expanded' : ''}`}
+                      >
+                        <div
+                          className="worldinfo-entry-header"
+                          onClick={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
+                        >
+                          <div className="entry-toggle-area">
+                            <span className="entry-expand-icon">{expandedId === entry.id ? '▼' : '▶'}</span>
+                            <div className="entry-key-badges">
+                              {entry.keys.slice(0, 5).map((key, i) => (
+                                <span key={i} className="entry-key-badge">{key}</span>
+                              ))}
+                              {entry.keys.length > 5 && (
+                                <span className="entry-key-badge more">+{entry.keys.length - 5}</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="entry-meta">
+                            {/* 快速分组标签 */}
+                            <span
+                              className={`entry-group-tag ${entry.group ? 'has-group' : ''}`}
+                              onClick={(e) => handleQuickAssignGroup(entry, e)}
+                              title={entry.group ? `分组: ${entry.group}（点击修改）` : '点击设置分组'}
+                            >
+                              {entry.group || '无分组'}
+                            </span>
+                            {entry.constant && <span className="entry-badge constant">常驻</span>}
+                            <span className="entry-badge position">{positionLabels[entry.position] || entry.position}</span>
+                            <span className="entry-comment">{entry.comment || '无备注'}</span>
+                          </div>
+                          <div className="entry-actions" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              className={`btn-icon ${entry.enabled ? 'enabled' : ''}`}
+                              onClick={() => handleToggle(entry)}
+                              title={entry.enabled ? '禁用' : '启用'}
+                            >
+                              {entry.enabled ? 'ON' : 'OFF'}
+                            </button>
+                            <button className="btn-icon" onClick={() => handleStartEdit(entry)} title="编辑">✏️</button>
+                            <button className="btn-icon delete" onClick={() => handleDelete(entry.id)} title="删除">🗑️</button>
+                          </div>
+                        </div>
+
+                        {expandedId === entry.id && (
+                          <div className="worldinfo-entry-body">
+                            <div className="entry-section">
+                              <span className="entry-label">内容:</span>
+                              <pre className="entry-content-preview">{entry.content}</pre>
+                            </div>
+                            <div className="entry-section">
+                              <span className="entry-label">关键词:</span>
+                              <div className="entry-keys-list">
+                                {entry.keys.map((key, i) => (
+                                  <span key={i} className="entry-key-badge">{key}</span>
+                                ))}
+                                {entry.keys.length === 0 && <span className="hint">无关键词（仅常驻模式有效）</span>}
+                              </div>
+                            </div>
+                            {/* 次关键词 */}
+                            {entry.secondaryKeys && entry.secondaryKeys.length > 0 && (
+                              <div className="entry-section">
+                                <span className="entry-label">次关键词:</span>
+                                <div className="entry-keys-list">
+                                  {entry.secondaryKeys.map((key, i) => (
+                                    <span key={i} className="entry-key-badge" style={{ background: 'rgba(255, 152, 0, 0.15)', color: '#FF9800' }}>{key}</span>
+                                  ))}
+                                </div>
+                                <span className="hint" style={{ marginLeft: '8px' }}>逻辑: {entry.selectiveLogic === 'AND' ? 'AND (全部匹配)' : 'OR (任一匹配)'}</span>
+                              </div>
+                            )}
+                            {/* 概率设置 */}
+                            {entry.useProbability && (
+                              <div className="entry-section">
+                                <span className="entry-label">概率:</span> {entry.probability}%
+                              </div>
+                            )}
+                            {/* 冷却/延迟 */}
+                            {(entry.cooldown > 0 || entry.delay > 0) && (
+                              <div className="entry-section">
+                                <span className="entry-label">时序:</span>
+                                {entry.cooldown > 0 && <span className="hint">冷却 {entry.cooldown} 轮</span>}
+                                {entry.cooldown > 0 && entry.delay > 0 && <span className="hint"> / </span>}
+                                {entry.delay > 0 && <span className="hint">延迟 {entry.delay} 轮</span>}
+                              </div>
+                            )}
+                            {/* 分组 */}
+                            <div className="entry-section">
+                              <span className="entry-label">分组:</span>{' '}
+                              <span
+                                className="entry-group-tag edit-inline"
+                                onClick={() => handleQuickAssignGroup(entry, { stopPropagation: () => {} } as any)}
+                                title="点击修改分组"
+                              >
+                                {entry.group || '（无）'}
+                              </span>
+                              {entry.groupOverride && <span className="entry-badge" style={{ marginLeft: '6px' }}>覆盖</span>}
+                              {entry.groupWeight !== 100 && (
+                                <span className="hint" style={{ marginLeft: '6px' }}>权重: {entry.groupWeight}</span>
+                              )}
+                            </div>
+                            {/* 注入深度 */}
+                            {entry.depth > 0 && (
+                              <div className="entry-section">
+                                <span className="entry-label">注入深度:</span> {entry.depth}
+                              </div>
+                            )}
+                            {/* Token 上限 */}
+                            {entry.tokenBudget > 0 && (
+                              <div className="entry-section">
+                                <span className="entry-label">Token 上限:</span> {entry.tokenBudget}
+                              </div>
+                            )}
+                            <div className="entry-details-grid">
+                              <div><span className="entry-label">位置:</span> {positionLabels[entry.position] || entry.position}</div>
+                              <div><span className="entry-label">扫描深度:</span> 最近 {entry.scanDepth} 条消息</div>
+                              <div><span className="entry-label">大小写:</span> {entry.caseSensitive ? '区分' : '不区分'}</div>
+                              <div><span className="entry-label">更新时间:</span> {new Date(entry.updatedAt).toLocaleString()}</div>
+                              {entry.preventRecursion && <div><span className="entry-label">防递归:</span> 是</div>}
+                              {entry.excludeRecursion && <div><span className="entry-label">排除递归:</span> 是</div>}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     ))}
-                    {entry.keys.length === 0 && <span className="hint">无关键词（仅常驻模式有效）</span>}
-                  </div>
-                </div>
-                {/* 次关键词 */}
-                {entry.secondaryKeys && entry.secondaryKeys.length > 0 && (
-                  <div className="entry-section">
-                    <span className="entry-label">次关键词:</span>
-                    <div className="entry-keys-list">
-                      {entry.secondaryKeys.map((key, i) => (
-                        <span key={i} className="entry-key-badge" style={{ background: 'rgba(255, 152, 0, 0.15)', color: '#FF9800' }}>{key}</span>
-                      ))}
-                    </div>
-                    <span className="hint" style={{ marginLeft: '8px' }}>逻辑: {entry.selectiveLogic === 'AND' ? 'AND (全部匹配)' : 'OR (任一匹配)'}</span>
                   </div>
                 )}
-                {/* 概率设置 */}
-                {entry.useProbability && (
-                  <div className="entry-section">
-                    <span className="entry-label">概率:</span> {entry.probability}%
-                  </div>
-                )}
-                {/* 冷却/延迟 */}
-                {(entry.cooldown > 0 || entry.delay > 0) && (
-                  <div className="entry-section">
-                    <span className="entry-label">时序:</span>
-                    {entry.cooldown > 0 && <span className="hint">冷却 {entry.cooldown} 轮</span>}
-                    {entry.cooldown > 0 && entry.delay > 0 && <span className="hint"> / </span>}
-                    {entry.delay > 0 && <span className="hint">延迟 {entry.delay} 轮</span>}
-                  </div>
-                )}
-                {/* 分组 */}
-                {entry.group && (
-                  <div className="entry-section">
-                    <span className="entry-label">分组:</span> {entry.group}
-                    {entry.groupOverride && <span className="entry-badge" style={{ marginLeft: '6px' }}>覆盖</span>}
-                  </div>
-                )}
-                {/* 注入深度 */}
-                {entry.depth > 0 && (
-                  <div className="entry-section">
-                    <span className="entry-label">注入深度:</span> {entry.depth}
-                  </div>
-                )}
-                {/* Token 上限 */}
-                {entry.tokenBudget > 0 && (
-                  <div className="entry-section">
-                    <span className="entry-label">Token 上限:</span> {entry.tokenBudget}
-                  </div>
-                )}
-                <div className="entry-details-grid">
-                  <div><span className="entry-label">位置:</span> {positionLabels[entry.position] || entry.position}</div>
-                  <div><span className="entry-label">扫描深度:</span> 最近 {entry.scanDepth} 条消息</div>
-                  <div><span className="entry-label">大小写:</span> {entry.caseSensitive ? '区分' : '不区分'}</div>
-                  <div><span className="entry-label">更新时间:</span> {new Date(entry.updatedAt).toLocaleString()}</div>
-                  {entry.preventRecursion && <div><span className="entry-label">防递归:</span> 是</div>}
-                  {entry.excludeRecursion && <div><span className="entry-label">排除递归:</span> 是</div>}
-                </div>
               </div>
-            )}
-          </div>
-        ))}
+            );
+          })}
       </div>
 
       {/* World Info 全局设置弹窗 */}
