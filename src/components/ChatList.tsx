@@ -100,6 +100,9 @@ const ChatList: React.FC = () => {
         <button className="btn-secondary" onClick={() => navigate('/roles')}>
           <span>👤</span> 角色
         </button>
+        <button className="btn-secondary" onClick={() => navigate('/worldinfo')}>
+          <span>📖</span> 世界书
+        </button>
         <button className="btn-secondary" onClick={() => navigate('/settings')}>
           <span>⚙️</span> 设置
         </button>
