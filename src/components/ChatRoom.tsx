@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useStoreState, addChat, addMessage, updateChat, updateMessage, deleteMessage, getState } from '../store/useStore';
+import { useStoreState, addChat, addMessage, updateChat, updateMessage, deleteMessage, getState, WorldInfoSettings } from '../store/useStore';
 import { streamChat, abortGeneration, MODEL_LIST, AIServiceConfig, ChatMessage } from '../services/ai';
 import { estimateTokens, estimateMessagesTokens, formatTokenCount, getContextUsage } from '../services/tokenCounter';
-import { scanWorldInfo, injectWorldInfo } from '../services/worldInfo';
+import { scanWorldInfo, injectWorldInfo, ScanContext, ScanResult } from '../services/worldInfo';
 import { useHotkeys } from '../hooks/useHotkeys';
 import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
@@ -20,9 +20,14 @@ const ChatRoom: React.FC = () => {
   const abortRef = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const { chats, roles, settings, worldInfo } = useStoreState();
+  const { chats, roles, settings, worldInfo, worldInfoSettings } = useStoreState();
   const chat = chats.find(c => String(c.id) === String(id));
   const role = roles.find(r => r.id === chat?.roleId) || roles[0];
+
+  // 触发历史 ref（跨渲染持久化）
+  const triggerHistoryRef = React.useRef(new Map<number, { lastTriggeredTurn: number; triggerCount: number }>());
+  // 当前对话轮数 ref
+  const currentTurnRef = React.useRef(0);
 
   useEffect(() => {
     if (!chat && id) {
@@ -143,9 +148,31 @@ const ChatRoom: React.FC = () => {
   // 构建 WorldInfo 增强的消息列表
   const buildWorldInfoMessages = useCallback((chatMsgs: typeof chat.msgs): ChatMessage[] => {
     const baseMessages = buildMessages(chatMsgs);
-    const { before, after } = scanWorldInfo(worldInfo, baseMessages);
-    return injectWorldInfo(before, after, baseMessages);
-  }, [buildMessages, worldInfo]);
+    // 后向兼容：如果 worldInfoSettings 不存在则使用默认值
+    const wiSettings: WorldInfoSettings = worldInfoSettings || {
+      globalTokenBudget: 0,
+      scanScope: {
+        messages: true,
+        charDescription: true,
+        charPersonality: true,
+        scenario: true,
+        creatorNotes: false,
+      },
+    };
+    const ctx: ScanContext = {
+      role: role ? {
+        description: role.description || '',
+        personality: '', // Role type doesn't have personality field
+        prompt: role.prompt || '',
+        name: role.name || '',
+      } : undefined,
+      worldInfoSettings: wiSettings,
+      triggerHistory: triggerHistoryRef.current,
+      currentTurn: currentTurnRef.current,
+    };
+    const scanResult: ScanResult = scanWorldInfo(worldInfo, baseMessages, ctx);
+    return injectWorldInfo(scanResult, baseMessages, ctx.role);
+  }, [buildMessages, worldInfo, worldInfoSettings, role]);
 
   // 流式生成通用逻辑
   const doStreamGenerate = useCallback(async (chatId: number, messages: ChatMessage[], targetMsgId: number) => {
@@ -188,6 +215,9 @@ const ChatRoom: React.FC = () => {
     const userMessage = input.trim();
     setInput('');
     abortRef.current = false;
+
+    // 递增对话轮数
+    currentTurnRef.current += 1;
 
     addMessage(chat.id, userMessage, true);
     setGenerating(true);

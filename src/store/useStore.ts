@@ -38,22 +38,77 @@ export type Role = {
 
 export type AIProvider = 'openai' | 'claude' | 'ollama' | 'openrouter';
 
+// SillyTavern 6 注入位置
+export type WIPosition =
+  | 'before_char'     // 0: 角色定义之前 (system之后)
+  | 'after_char'      // 1: 角色定义之后
+  | 'before_example'  // 2: 示例消息之前
+  | 'after_example'   // 3: 示例消息之后
+  | 'before_last'     // 4: 最后一条消息之前
+  | 'after_last';     // 5: 最后一条消息之后 (Author's Note位置)
+
 export type WorldInfoEntry = {
   id: number;
-  keys: string[];           // 触发关键词列表
-  content: string;            // 条目内容（注入到上下文中）
-  comment: string;            // 备注/描述（仅用于显示）
-  enabled: boolean;           // 是否启用
-  constant: boolean;          // 是否常驻（无论是否匹配都注入）
-  position: 'before' | 'after'; // 注入位置：before=system之后, after=消息末尾
-  order: number;              // 排序顺序
-  caseSensitive: boolean;     // 关键词是否区分大小写
-  scanDepth: number;          // 扫描深度：扫描最近N条消息
+  // 基础字段
+  keys: string[];              // 主触发关键词列表
+  secondaryKeys: string[];     // 次关键词列表
+  selectiveLogic: 'AND' | 'OR'; // 主+次关键词组合逻辑
+  content: string;             // 条目内容
+  comment: string;             // 备注
+  name: string;                // 条目名称
+  enabled: boolean;
+  constant: boolean;           // 常驻注入
+  // 位置与顺序
+  position: WIPosition;        // 注入位置（6选1）
+  order: number;               // 排序/注入顺序
+  depth: number;               // 注入深度（插入到倒数第几条消息之前，0=按position）
+  // 匹配控制
+  caseSensitive: boolean;
+  scanDepth: number;           // 扫描最近N条消息
+  useProbability: boolean;     // 启用概率触发
+  probability: number;         // 触发概率 0-100
+  preventRecursion: boolean;   // 防递归（匹配后从扫描文本移除关键词）
+  excludeRecursion: boolean;   // 排除递归条目
+  // 时序控制
+  cooldown: number;            // 触发冷却轮数
+  delay: number;               // 延迟触发轮数
+  // 分组与过滤
+  group: string;               // 分组名
+  groupOverride: boolean;      // 组覆盖
+  groupWeight: number;         // 组权重
+  scanRole: number | null;     // 仅匹配指定角色的消息 (null=所有)
+  role: number | null;         // 限制条目对特定角色生效 (null=所有)
+  // Token 控制
+  tokenBudget: number;         // 单条目token上限 (0=不限)
+  // 时间戳
   createdAt: string;
   updatedAt: string;
 };
 
+export type WorldInfoSettings = {
+  globalTokenBudget: number;    // 全局token预算 (0=不限)
+  scanScope: {
+    messages: boolean;          // 扫描聊天消息
+    charDescription: boolean;   // 扫描角色描述
+    charPersonality: boolean;   // 扫描角色人设
+    scenario: boolean;          // 扫描场景
+    creatorNotes: boolean;      // 扫描作者备注
+  };
+};
+
+const defaultWorldInfoSettings: WorldInfoSettings = {
+  globalTokenBudget: 0,
+  scanScope: {
+    messages: true,
+    charDescription: true,
+    charPersonality: true,
+    scenario: true,
+    creatorNotes: false,
+  },
+};
+
 export type Settings = {
+  worldInfo: WorldInfoSettings;
   api: {
     activeProvider: AIProvider;
     activeModel: string;
@@ -96,6 +151,16 @@ const mockAvatars = [
 ];
 
 const defaultSettings: Settings = {
+  worldInfo: {
+    globalTokenBudget: 0,
+    scanScope: {
+      messages: true,
+      charDescription: true,
+      charPersonality: true,
+      scenario: true,
+      creatorNotes: false,
+    },
+  },
   api: {
     activeProvider: 'openai',
     activeModel: 'gpt-4o-mini',
@@ -224,6 +289,7 @@ const createStore = () => {
     roles: loadFromStorage<Role[]>('sillytavern-roles', defaultRoles),
     settings: loadFromStorage<Settings>('sillytavern-settings', defaultSettings),
     worldInfo: loadFromStorage<WorldInfoEntry[]>('sillytavern-worldinfo', defaultWorldInfo),
+    worldInfoSettings: loadFromStorage<WorldInfoSettings>('sillytavern-worldinfo-settings', defaultWorldInfoSettings),
   };
 
   const subscribe = (fn: (state: any) => void) => {
@@ -241,6 +307,7 @@ const createStore = () => {
       saveToStorage('sillytavern-roles', state.roles);
       saveToStorage('sillytavern-settings', state.settings);
       saveToStorage('sillytavern-worldinfo', state.worldInfo);
+      saveToStorage('sillytavern-worldinfo-settings', state.worldInfoSettings);
     }
   };
 
@@ -407,26 +474,34 @@ const createStore = () => {
       notify();
     },
 
+    // WorldInfo settings operations
+    updateWorldInfoSettings: (updates: Partial<WorldInfoSettings>) => {
+      Object.assign(state.worldInfoSettings, updates);
+      notify();
+    },
+
     // Import/Export
     exportData: () => ({
       chats: state.chats,
       roles: state.roles,
       settings: state.settings,
       worldInfo: state.worldInfo,
+      worldInfoSettings: state.worldInfoSettings,
     }),
     
-    importData: (data: { chats?: Chat[]; roles?: Role[]; settings?: Settings; worldInfo?: WorldInfoEntry[] }) => {
+    importData: (data: { chats?: Chat[]; roles?: Role[]; settings?: Settings; worldInfo?: WorldInfoEntry[]; worldInfoSettings?: WorldInfoSettings }) => {
       if (data.chats) state.chats = data.chats;
       if (data.roles) state.roles = data.roles;
       if (data.settings) state.settings = data.settings;
       if (data.worldInfo) state.worldInfo = data.worldInfo;
+      if (data.worldInfoSettings) state.worldInfoSettings = data.worldInfoSettings;
       notify();
     },
   };
 };
 
 const store = createStore();
-export const { subscribe, getState, addChat, updateChat, deleteChat, addMessage, updateMessage, deleteMessage, markRead, addRole, updateRole, deleteRole, updateSettings, resetSettings, exportData, importData, addWorldInfoEntry, updateWorldInfoEntry, deleteWorldInfoEntry, reorderWorldInfo } = store;
+export const { subscribe, getState, addChat, updateChat, deleteChat, addMessage, updateMessage, deleteMessage, markRead, addRole, updateRole, deleteRole, updateSettings, resetSettings, exportData, importData, addWorldInfoEntry, updateWorldInfoEntry, deleteWorldInfoEntry, reorderWorldInfo, updateWorldInfoSettings } = store;
 
 // 兼容旧版API
 export const messages = {

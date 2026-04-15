@@ -6,26 +6,55 @@ import {
   updateWorldInfoEntry,
   deleteWorldInfoEntry,
   WorldInfoEntry,
+  WIPosition,
+  WorldInfoSettings,
+  updateWorldInfoSettings,
 } from '../store/useStore';
+
+const positionLabels: Record<WIPosition, string> = {
+  before_char: 'System 之后',
+  after_char: '角色定义之后',
+  before_example: '示例消息之前',
+  after_example: '示例消息之后',
+  before_last: '最后消息之前',
+  after_last: '消息末尾',
+};
 
 const WorldInfoPage: React.FC = () => {
   const navigate = useNavigate();
-  const { worldInfo } = useStoreState();
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [editingEntry, setEditingEntry] = useState<WorldInfoEntry | null>(null);
   const [showNewForm, setShowNewForm] = useState(false);
+
+  const { worldInfo, worldInfoSettings } = useStoreState();
 
   // 新建条目表单
   const [newForm, setNewForm] = useState({
     keys: '',
     content: '',
     comment: '',
+    name: '',
     enabled: true,
     constant: false,
-    position: 'before' as 'before' | 'after',
+    position: 'before_char' as WIPosition,
     caseSensitive: false,
     scanDepth: 10,
+    secondaryKeys: '',
+    selectiveLogic: 'OR' as 'AND' | 'OR',
+    depth: 0,
+    useProbability: false,
+    probability: 100,
+    preventRecursion: false,
+    excludeRecursion: false,
+    cooldown: 0,
+    delay: 0,
+    group: '',
+    groupOverride: false,
+    groupWeight: 100,
+    scanRole: '' as string,
+    role: '' as string,
+    tokenBudget: 0,
   });
 
   // 编辑条目表单
@@ -33,11 +62,27 @@ const WorldInfoPage: React.FC = () => {
     keys: '',
     content: '',
     comment: '',
+    name: '',
     enabled: true,
     constant: false,
-    position: 'before' as 'before' | 'after',
+    position: 'before_char' as WIPosition,
     caseSensitive: false,
     scanDepth: 10,
+    secondaryKeys: '',
+    selectiveLogic: 'OR' as 'AND' | 'OR',
+    depth: 0,
+    useProbability: false,
+    probability: 100,
+    preventRecursion: false,
+    excludeRecursion: false,
+    cooldown: 0,
+    delay: 0,
+    group: '',
+    groupOverride: false,
+    groupWeight: 100,
+    scanRole: '' as string,
+    role: '' as string,
+    tokenBudget: 0,
   });
 
   const sortedEntries = [...worldInfo]
@@ -58,32 +103,82 @@ const WorldInfoPage: React.FC = () => {
       .split(',')
       .map(k => k.trim())
       .filter(Boolean);
+    const secondaryKeys = newForm.secondaryKeys
+      .split(',')
+      .map(k => k.trim())
+      .filter(Boolean);
     addWorldInfoEntry({
       keys,
+      secondaryKeys,
+      selectiveLogic: newForm.selectiveLogic,
       content: newForm.content.trim(),
       comment: newForm.comment.trim(),
+      name: newForm.name.trim(),
       enabled: newForm.enabled,
       constant: newForm.constant,
       position: newForm.position,
       caseSensitive: newForm.caseSensitive,
       scanDepth: newForm.scanDepth,
       order: worldInfo.length,
+      depth: newForm.depth,
+      useProbability: newForm.useProbability,
+      probability: newForm.probability,
+      preventRecursion: newForm.preventRecursion,
+      excludeRecursion: newForm.excludeRecursion,
+      cooldown: newForm.cooldown,
+      delay: newForm.delay,
+      group: newForm.group.trim(),
+      groupOverride: newForm.groupOverride,
+      groupWeight: newForm.groupWeight,
+      scanRole: newForm.scanRole ? parseInt(newForm.scanRole) || null : null,
+      role: newForm.role ? parseInt(newForm.role) || null : null,
+      tokenBudget: newForm.tokenBudget,
     });
-    setNewForm({ keys: '', content: '', comment: '', enabled: true, constant: false, position: 'before', caseSensitive: false, scanDepth: 10 });
+    setNewForm({
+      keys: '', content: '', comment: '', name: '', enabled: true, constant: false,
+      position: 'before_char', caseSensitive: false, scanDepth: 10,
+      secondaryKeys: '', selectiveLogic: 'OR', depth: 0,
+      useProbability: false, probability: 100,
+      preventRecursion: false, excludeRecursion: false,
+      cooldown: 0, delay: 0, group: '', groupOverride: false, groupWeight: 100,
+      scanRole: '', role: '', tokenBudget: 0,
+    });
     setShowNewForm(false);
   };
 
   const handleStartEdit = (entry: WorldInfoEntry) => {
     setEditingEntry(entry);
+    // 兼容旧数据：归一化 position（旧数据可能是 'before' 或 'after'）
+    let pos: WIPosition = entry.position as WIPosition;
+    const rawPos = entry.position as string;
+    if (rawPos === 'before' || rawPos === 'after') {
+      pos = rawPos === 'before' ? 'before_char' : 'after_last';
+    }
     setEditForm({
-      keys: entry.keys.join(', '),
-      content: entry.content,
-      comment: entry.comment,
-      enabled: entry.enabled,
-      constant: entry.constant,
-      position: entry.position,
-      caseSensitive: entry.caseSensitive,
-      scanDepth: entry.scanDepth,
+      keys: (entry.keys || []).join(', '),
+      content: entry.content || '',
+      comment: entry.comment || '',
+      name: entry.name || '',
+      enabled: entry.enabled !== false,
+      constant: entry.constant || false,
+      position: pos as WIPosition,
+      caseSensitive: entry.caseSensitive || false,
+      scanDepth: entry.scanDepth || 10,
+      secondaryKeys: (entry.secondaryKeys || []).join(', '),
+      selectiveLogic: entry.selectiveLogic === 'AND' ? 'AND' : 'OR',
+      depth: entry.depth || 0,
+      useProbability: entry.useProbability || false,
+      probability: entry.probability || 100,
+      preventRecursion: entry.preventRecursion || false,
+      excludeRecursion: entry.excludeRecursion || false,
+      cooldown: entry.cooldown || 0,
+      delay: entry.delay || 0,
+      group: entry.group || '',
+      groupOverride: entry.groupOverride || false,
+      groupWeight: entry.groupWeight || 100,
+      scanRole: entry.scanRole != null ? String(entry.scanRole) : '',
+      role: entry.role != null ? String(entry.role) : '',
+      tokenBudget: entry.tokenBudget || 0,
     });
   };
 
@@ -93,15 +188,35 @@ const WorldInfoPage: React.FC = () => {
       .split(',')
       .map(k => k.trim())
       .filter(Boolean);
+    const secondaryKeys = editForm.secondaryKeys
+      .split(',')
+      .map(k => k.trim())
+      .filter(Boolean);
     updateWorldInfoEntry(editingEntry.id, {
       keys,
+      secondaryKeys,
+      selectiveLogic: editForm.selectiveLogic,
       content: editForm.content.trim(),
       comment: editForm.comment.trim(),
+      name: editForm.name.trim(),
       enabled: editForm.enabled,
       constant: editForm.constant,
       position: editForm.position,
       caseSensitive: editForm.caseSensitive,
       scanDepth: editForm.scanDepth,
+      depth: editForm.depth,
+      useProbability: editForm.useProbability,
+      probability: editForm.probability,
+      preventRecursion: editForm.preventRecursion,
+      excludeRecursion: editForm.excludeRecursion,
+      cooldown: editForm.cooldown,
+      delay: editForm.delay,
+      group: editForm.group.trim(),
+      groupOverride: editForm.groupOverride,
+      groupWeight: editForm.groupWeight,
+      scanRole: editForm.scanRole ? parseInt(editForm.scanRole) || null : null,
+      role: editForm.role ? parseInt(editForm.role) || null : null,
+      tokenBudget: editForm.tokenBudget,
     });
     setEditingEntry(null);
   };
@@ -174,15 +289,32 @@ const WorldInfoPage: React.FC = () => {
 
             addWorldInfoEntry({
               keys: keyArray,
+              secondaryKeys: entry.secondary_keys ?
+                (Array.isArray(entry.secondary_keys) ? entry.secondary_keys : String(entry.secondary_keys).split(',').map((k: string) => k.trim()).filter(Boolean)) :
+                [],
+              selectiveLogic: entry.selectiveLogic === 'AND' ? 'AND' : 'OR',
               content: entry.content || '',
               comment: entry.comment || entry.name || '',
-              // SillyTavern 用 disable=true 表示禁用，我们用 enabled
+              name: entry.name || '',
               enabled: entry.disable === true ? false : (entry.enabled !== false),
               constant: entry.constant || false,
               position: mapPosition(entry.position),
               caseSensitive: entry.caseSensitive || false,
               scanDepth: entry.scanDepth || entry.depth || 10,
               order: entry.order ?? entry.displayIndex ?? worldInfo.length,
+              depth: entry.depth || 0,
+              useProbability: entry.useProbability || false,
+              probability: entry.probability || 100,
+              preventRecursion: entry.preventRecursion || false,
+              excludeRecursion: entry.excludeRecursion || false,
+              cooldown: entry.cooldown || 0,
+              delay: entry.delay || 0,
+              group: entry.group || '',
+              groupOverride: entry.groupOverride || false,
+              groupWeight: entry.groupWeight || 100,
+              scanRole: null,
+              role: null,
+              tokenBudget: entry.tokenBudget || 0,
             });
             count++;
           }
@@ -196,12 +328,31 @@ const WorldInfoPage: React.FC = () => {
     input.click();
   };
 
-  // SillyTavern position 数字映射到我们的 before/after
-  const mapPosition = (pos: any): 'before' | 'after' => {
-    if (typeof pos === 'string') return pos === 'after' ? 'after' : 'before';
-    // SillyTavern: 0=before_char_def, 1=after_char_def, 2=before_example_msg, 3=after_example_msg, 4=AN
-    if (pos === undefined || pos === null) return 'before';
-    return pos <= 1 ? 'before' : 'after';
+  // SillyTavern position 数字映射到新的 WIPosition
+  const mapPosition = (pos: any): WIPosition => {
+    if (!pos) return 'before_char';
+    const newPositions: WIPosition[] = [
+      'before_char', 'after_char', 'before_example',
+      'after_example', 'before_last', 'after_last',
+    ];
+    if (typeof pos === 'string') {
+      if (newPositions.includes(pos as WIPosition)) return pos as WIPosition;
+      if (pos === 'before') return 'before_char';
+      if (pos === 'after') return 'after_last';
+      return 'before_char';
+    }
+    // SillyTavern 数字: 0=before_char, 1=after_char, 2=before_example, 3=after_example, 4=AN
+    if (typeof pos === 'number') {
+      switch (pos) {
+        case 0: return 'before_char';
+        case 1: return 'after_char';
+        case 2: return 'before_example';
+        case 3: return 'after_example';
+        case 4: return 'after_last';
+        default: return 'before_char';
+      }
+    }
+    return 'before_char';
   };
 
   return (
@@ -281,10 +432,14 @@ const WorldInfoPage: React.FC = () => {
                 <label>注入位置</label>
                 <select
                   value={newForm.position}
-                  onChange={(e) => setNewForm(prev => ({ ...prev, position: e.target.value as 'before' | 'after' }))}
+                  onChange={(e) => setNewForm(prev => ({ ...prev, position: e.target.value as WIPosition }))}
                 >
-                  <option value="before">System 之后</option>
-                  <option value="after">消息末尾</option>
+                  <option value="before_char">System 之后</option>
+                  <option value="after_char">角色定义之后</option>
+                  <option value="before_example">示例消息之前</option>
+                  <option value="after_example">示例消息之后</option>
+                  <option value="before_last">最后消息之前</option>
+                  <option value="after_last">消息末尾</option>
                 </select>
               </div>
               <div className="form-group">
@@ -363,10 +518,14 @@ const WorldInfoPage: React.FC = () => {
                 <label>注入位置</label>
                 <select
                   value={editForm.position}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, position: e.target.value as 'before' | 'after' }))}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, position: e.target.value as WIPosition }))}
                 >
-                  <option value="before">System 之后</option>
-                  <option value="after">消息末尾</option>
+                  <option value="before_char">System 之后</option>
+                  <option value="after_char">角色定义之后</option>
+                  <option value="before_example">示例消息之前</option>
+                  <option value="after_example">示例消息之后</option>
+                  <option value="before_last">最后消息之前</option>
+                  <option value="after_last">消息末尾</option>
                 </select>
               </div>
               <div className="form-group">
@@ -442,7 +601,7 @@ const WorldInfoPage: React.FC = () => {
               </div>
               <div className="entry-meta">
                 {entry.constant && <span className="entry-badge constant">常驻</span>}
-                <span className="entry-badge position">{entry.position === 'before' ? '前置' : '后置'}</span>
+                <span className="entry-badge position">{positionLabels[entry.position] || entry.position}</span>
                 <span className="entry-comment">{entry.comment || '无备注'}</span>
               </div>
               <div className="entry-actions" onClick={(e) => e.stopPropagation()}>
@@ -474,7 +633,7 @@ const WorldInfoPage: React.FC = () => {
                   </div>
                 </div>
                 <div className="entry-details-grid">
-                  <div><span className="entry-label">位置:</span> {entry.position === 'before' ? 'System 之后' : '消息末尾'}</div>
+                  <div><span className="entry-label">位置:</span> {positionLabels[entry.position] || entry.position}</div>
                   <div><span className="entry-label">扫描深度:</span> 最近 {entry.scanDepth} 条消息</div>
                   <div><span className="entry-label">大小写:</span> {entry.caseSensitive ? '区分' : '不区分'}</div>
                   <div><span className="entry-label">更新时间:</span> {new Date(entry.updatedAt).toLocaleString()}</div>
