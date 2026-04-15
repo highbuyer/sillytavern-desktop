@@ -364,28 +364,23 @@ export async function chatCompletion(
 
 export async function fetchModels(config: AIServiceConfig): Promise<AIModel[]> {
   console.log('开始获取模型列表，配置:', JSON.stringify(config, null, 2));
-  try {
-    let models: AIModel[] = [];
-    switch (config.provider) {
-      case 'openai':
-      case 'openrouter':
-        models = await fetchOpenAIModels(config);
-        break;
-      case 'claude':
-        models = await fetchClaudeModels(config);
-        break;
-      case 'ollama':
-        models = await fetchOllamaModels(config);
-        break;
-      default:
-        models = [];
-    }
-    console.log('获取到的模型数量:', models.length);
-    return models;
-  } catch (error) {
-    console.error('获取模型列表失败:', error);
-    return [];
+  let models: AIModel[] = [];
+  switch (config.provider) {
+    case 'openai':
+    case 'openrouter':
+      models = await fetchOpenAIModels(config);
+      break;
+    case 'claude':
+      models = await fetchClaudeModels(config);
+      break;
+    case 'ollama':
+      models = await fetchOllamaModels(config);
+      break;
+    default:
+      models = [];
   }
+  console.log('获取到的模型数量:', models.length);
+  return models;
 }
 
 async function fetchOpenAIModels(config: AIServiceConfig): Promise<AIModel[]> {

@@ -16,6 +16,15 @@ const SettingsPage: React.FC = () => {
 
   useEffect(() => {
     setForm(settings);
+    // 页面加载时同步已有的代理设置到主进程
+    if (settings.api.proxyUrl) {
+      try {
+        const { ipcRenderer } = require('electron');
+        if (ipcRenderer && ipcRenderer.invoke) {
+          ipcRenderer.invoke('set-proxy', settings.api.proxyUrl);
+        }
+      } catch (e) { /* ignore */ }
+    }
     
     // 页面加载时，如果有配置就尝试获取模型列表
     const provider = settings.api.activeProvider;
@@ -43,8 +52,24 @@ const SettingsPage: React.FC = () => {
     }
   }, [form.api.activeProvider, form.api.openaiKey, form.api.claudeKey, form.api.openrouterKey]);
 
+  // 同步代理设置到 Electron 主进程
+  const syncProxyToElectron = (proxyUrl: string) => {
+    try {
+      const { ipcRenderer } = require('electron');
+      if (ipcRenderer && ipcRenderer.invoke) {
+        ipcRenderer.invoke('set-proxy', proxyUrl || '');
+        console.log('已同步代理设置到主进程:', proxyUrl || '直连');
+      }
+    } catch (e) {
+      // 非 Electron 环境忽略
+      console.log('非 Electron 环境，跳过代理同步');
+    }
+  };
+
   const handleSave = () => {
     updateSettings(form);
+    // 保存时同步代理
+    syncProxyToElectron(form.api.proxyUrl);
     alert('设置已保存');
   };
 
@@ -184,8 +209,9 @@ const SettingsPage: React.FC = () => {
         if (!currentModelExists && models[0]) {
           updateForm('api', 'activeModel', models[0].id);
         }
+        setModelFetchError(null);
       } else {
-        setModelFetchError('未获取到可用模型。请检查API密钥和网络连接。');
+        setModelFetchError('未获取到可用模型。请检查API地址、密钥是否正确，以及网络连接是否正常。');
       }
     } catch (error: any) {
       console.error('获取模型失败详情:', error);

@@ -180,19 +180,23 @@ function createWindow() {
 app.whenReady().then(() => {
   console.log('Electron app is ready');
 
-  // 设置全局代理 - 使用更可靠的方法
-  const proxyUrl = 'http://127.0.0.1:10808';
-  app.commandLine.appendSwitch('proxy-server', proxyUrl);
-  console.log('设置代理服务器:', proxyUrl);
-  
-  // 同时设置session代理
-  session.defaultSession.setProxy({
-    proxyRules: proxyUrl
-  }).then(() => {
-    console.log('Session代理设置成功');
-  }).catch(err => {
-    console.error('Session代理设置失败:', err);
+  // 不设置默认代理，由渲染进程通过 IPC 动态配置
+  // 监听渲染进程发来的代理设置请求
+  const { ipcMain } = require('electron');
+  ipcMain.handle('set-proxy', (event, proxyUrl) => {
+    if (proxyUrl && proxyUrl.trim()) {
+      console.log('设置代理服务器:', proxyUrl);
+      session.defaultSession.setProxy({ proxyRules: proxyUrl.trim() })
+        .then(() => console.log('Session代理设置成功:', proxyUrl))
+        .catch(err => console.error('Session代理设置失败:', err));
+    } else {
+      console.log('清除代理，使用直连');
+      session.defaultSession.setProxy({ proxyRules: '' })
+        .then(() => console.log('已清除代理'))
+        .catch(err => console.error('清除代理失败:', err));
+    }
   });
+  console.log('代理管理模块就绪，等待渲染进程配置');
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
