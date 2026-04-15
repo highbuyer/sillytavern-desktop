@@ -23,15 +23,15 @@ const RoleEditor: React.FC<RoleEditorProps> = ({ role, onSave, onCancel }) => {
   useEffect(() => {
     if (role) {
       setForm({
-        name: role.name,
-        description: role.description,
-        avatar: role.avatar,
-        prompt: role.prompt,
-        temperature: role.temperature,
-        maxTokens: role.maxTokens,
-        topP: role.topP,
-        frequencyPenalty: role.frequencyPenalty,
-        presencePenalty: role.presencePenalty,
+        name: role.name || '',
+        description: role.description || '',
+        avatar: role.avatar || '',
+        prompt: role.prompt || '',
+        temperature: role.temperature ?? 0.7,
+        maxTokens: role.maxTokens ?? 2000,
+        topP: role.topP ?? 0.9,
+        frequencyPenalty: role.frequencyPenalty ?? 0.0,
+        presencePenalty: role.presencePenalty ?? 0.0,
       });
     }
   }, [role]);

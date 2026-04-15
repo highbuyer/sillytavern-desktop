@@ -295,11 +295,11 @@ export function parsedCardToRole(card: ParsedCharacterCard): Omit<Role, 'id' | '
     description: card.description || card.personality || '',
     avatar: card.avatar || generateDefaultAvatar(card.name),
     prompt: card.system_prompt || card.first_mes || card.description || '',
-    temperature: card.temperature,
-    maxTokens: card.maxTokens,
-    topP: card.topP,
-    frequencyPenalty: card.frequencyPenalty,
-    presencePenalty: card.presencePenalty,
+    temperature: card.temperature ?? 0.7,
+    maxTokens: card.maxTokens ?? 2000,
+    topP: card.topP ?? 0.9,
+    frequencyPenalty: card.frequencyPenalty ?? 0.0,
+    presencePenalty: card.presencePenalty ?? 0.0,
   };
 }
 
