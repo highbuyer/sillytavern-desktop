@@ -97,6 +97,9 @@ const ChatList: React.FC = () => {
         <button className="btn-secondary" onClick={() => navigate('/roles')}>
           <span>👤</span> 角色管理
         </button>
+        <button className="btn-secondary" onClick={() => navigate('/worldinfo')}>
+          <span>📖</span> World Info
+        </button>
       </div>
 
       {filteredChats.map((chat) => (

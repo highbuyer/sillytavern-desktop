@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useStoreState, addMessage, updateChat, updateMessage, deleteMessage, getState } from '../store/useStore';
+import { useStoreState, addChat, addMessage, updateChat, updateMessage, deleteMessage, getState } from '../store/useStore';
 import { streamChat, abortGeneration, MODEL_LIST, AIServiceConfig, ChatMessage } from '../services/ai';
-import { estimateTokens, formatTokenCount, getContextUsage } from '../services/tokenCounter';
+import { estimateTokens, estimateMessagesTokens, formatTokenCount, getContextUsage } from '../services/tokenCounter';
+import { scanWorldInfo, injectWorldInfo } from '../services/worldInfo';
+import { useHotkeys } from '../hooks/useHotkeys';
 import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
 import RoleSelector from './RoleSelector';
@@ -14,9 +16,11 @@ const ChatRoom: React.FC = () => {
   const [input, setInput] = useState('');
   const [generating, setGenerating] = useState(false);
   const [streamingMsgId, setStreamingMsgId] = useState<number | null>(null);
+  const [showHotkeys, setShowHotkeys] = useState(false);
   const abortRef = useRef(false);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const { chats, roles, settings } = useStoreState();
+  const { chats, roles, settings, worldInfo } = useStoreState();
   const chat = chats.find(c => String(c.id) === String(id));
   const role = roles.find(r => r.id === chat?.roleId) || roles[0];
 
@@ -29,6 +33,35 @@ const ChatRoom: React.FC = () => {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chat?.msgs]);
+
+  // 自动更新 handleStop 引用
+  const handleStopStable = useCallback(() => {
+    abortRef.current = true;
+    abortGeneration();
+  }, []);
+
+  // 快捷键 - 延迟注册避免引用问题
+  const [hotkeysReady, setHotkeysReady] = useState(false);
+  useEffect(() => { setHotkeysReady(true); }, []);
+
+  useHotkeys(hotkeysReady ? [
+    { key: 'Escape', description: '停止生成', action: handleStopStable },
+    { key: '/', description: '聚焦输入框', action: () => inputRef.current?.focus() },
+    { key: '?', shift: true, description: '显示快捷键帮助', action: () => setShowHotkeys(prev => !prev) },
+  ] : [], true);
+
+  // 输入区域中的快捷键 (Ctrl+N 新建, Ctrl+, 设置) 
+  useHotkeys(hotkeysReady ? [
+    { key: 'n', ctrl: true, description: '新建聊天', action: () => {
+      const newChatId = addChat({
+        name: '新聊天',
+        avatar: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><circle cx="20" cy="20" r="18" fill="#4CAF50"/></svg>',
+        lastMessage: '', unread: 0, msgs: [], starred: false, tags: [],
+      });
+      navigate(`/chat/${newChatId}`);
+    }},
+    { key: ',', ctrl: true, description: '打开设置', action: () => navigate('/settings') },
+  ] : [], true);
 
   // Token 计数
   const tokenInfo = useMemo(() => {
@@ -107,6 +140,13 @@ const ChatRoom: React.FC = () => {
     return messages;
   }, [role]);
 
+  // 构建 WorldInfo 增强的消息列表
+  const buildWorldInfoMessages = useCallback((chatMsgs: typeof chat.msgs): ChatMessage[] => {
+    const baseMessages = buildMessages(chatMsgs);
+    const { before, after } = scanWorldInfo(worldInfo, baseMessages);
+    return injectWorldInfo(before, after, baseMessages);
+  }, [buildMessages, worldInfo]);
+
   // 流式生成通用逻辑
   const doStreamGenerate = useCallback(async (chatId: number, messages: ChatMessage[], targetMsgId: number) => {
     const config = buildAIConfig();
@@ -162,7 +202,7 @@ const ChatRoom: React.FC = () => {
 
     const currentChats = getState().chats;
     const chatMsgs = currentChats.find(c => c.id === chat.id)?.msgs || [];
-    const messages = buildMessages(chatMsgs.slice(0, -1));
+    const messages = buildWorldInfoMessages(chatMsgs.slice(0, -1));
 
     await doStreamGenerate(chat.id, messages, aiMsgId);
   };
@@ -192,7 +232,7 @@ const ChatRoom: React.FC = () => {
 
     const currentChats = getState().chats;
     const chatMsgs = currentChats.find(c => c.id === chat.id)?.msgs || [];
-    const messages = buildMessages(chatMsgs.slice(0, -1));
+    const messages = buildWorldInfoMessages(chatMsgs.slice(0, -1));
 
     await doStreamGenerate(chat.id, messages, newMsgId);
   };
@@ -227,7 +267,7 @@ const ChatRoom: React.FC = () => {
         setTimeout(async () => {
           const currentChats = getState().chats;
           const chatMsgs = currentChats.find(c => c.id === chat.id)?.msgs || [];
-          const messages = buildMessages(chatMsgs.slice(0, -1));
+          const messages = buildWorldInfoMessages(chatMsgs.slice(0, -1));
           await doStreamGenerate(chat.id, messages, newMsgId);
         }, 50);
       }
@@ -270,8 +310,29 @@ const ChatRoom: React.FC = () => {
           <button className="btn-icon" onClick={() => navigate(`/chat/${id}/settings`)}>
             设置
           </button>
+          <button className="btn-icon" onClick={() => setShowHotkeys(prev => !prev)} title="快捷键 (?)">
+            ⌨
+          </button>
         </div>
       </div>
+
+      {showHotkeys && (
+        <div className="hotkeys-panel">
+          <div className="hotkeys-header">
+            <h3>快捷键</h3>
+            <button className="btn-icon" onClick={() => setShowHotkeys(false)}>X</button>
+          </div>
+          <div className="hotkeys-grid">
+            <div className="hotkey-item"><kbd>Enter</kbd><span>发送消息</span></div>
+            <div className="hotkey-item"><kbd>Shift+Enter</kbd><span>换行</span></div>
+            <div className="hotkey-item"><kbd>Esc</kbd><span>停止生成</span></div>
+            <div className="hotkey-item"><kbd>Ctrl+N</kbd><span>新建聊天</span></div>
+            <div className="hotkey-item"><kbd>Ctrl+,</kbd><span>打开设置</span></div>
+            <div className="hotkey-item"><kbd>/</kbd><span>聚焦输入框</span></div>
+            <div className="hotkey-item"><kbd>Shift+?</kbd><span>显示/隐藏快捷键</span></div>
+          </div>
+        </div>
+      )}
 
       <div className="messages">
         {chat.msgs.map((message) => (

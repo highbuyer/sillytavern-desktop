@@ -38,6 +38,21 @@ export type Role = {
 
 export type AIProvider = 'openai' | 'claude' | 'ollama' | 'openrouter';
 
+export type WorldInfoEntry = {
+  id: number;
+  keys: string[];           // 触发关键词列表
+  content: string;            // 条目内容（注入到上下文中）
+  comment: string;            // 备注/描述（仅用于显示）
+  enabled: boolean;           // 是否启用
+  constant: boolean;          // 是否常驻（无论是否匹配都注入）
+  position: 'before' | 'after'; // 注入位置：before=system之后, after=消息末尾
+  order: number;              // 排序顺序
+  caseSensitive: boolean;     // 关键词是否区分大小写
+  scanDepth: number;          // 扫描深度：扫描最近N条消息
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Settings = {
   api: {
     activeProvider: AIProvider;
@@ -198,6 +213,8 @@ const saveToStorage = (key: string, data: any) => {
   }
 };
 
+const defaultWorldInfo: WorldInfoEntry[] = [];
+
 const createStore = () => {
   const subscribers = new Set<(state: any) => void>();
   
@@ -205,6 +222,7 @@ const createStore = () => {
     chats: loadFromStorage<Chat[]>('sillytavern-chats', initialChats),
     roles: loadFromStorage<Role[]>('sillytavern-roles', defaultRoles),
     settings: loadFromStorage<Settings>('sillytavern-settings', defaultSettings),
+    worldInfo: loadFromStorage<WorldInfoEntry[]>('sillytavern-worldinfo', defaultWorldInfo),
   };
 
   const subscribe = (fn: (state: any) => void) => {
@@ -220,6 +238,7 @@ const createStore = () => {
       saveToStorage('sillytavern-chats', state.chats);
       saveToStorage('sillytavern-roles', state.roles);
       saveToStorage('sillytavern-settings', state.settings);
+      saveToStorage('sillytavern-worldinfo', state.worldInfo);
     }
   };
 
@@ -344,24 +363,68 @@ const createStore = () => {
       notify();
     },
     
+    // WorldInfo operations
+    addWorldInfoEntry: (entry: Omit<WorldInfoEntry, 'id' | 'createdAt' | 'updatedAt'>) => {
+      const newEntry: WorldInfoEntry = {
+        ...entry,
+        id: Date.now(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      state.worldInfo.push(newEntry);
+      notify();
+      return newEntry.id;
+    },
+
+    updateWorldInfoEntry: (entryId: number, updates: Partial<WorldInfoEntry>) => {
+      const entry = state.worldInfo.find((e) => e.id === entryId);
+      if (entry) {
+        Object.assign(entry, updates, { updatedAt: new Date().toISOString() });
+        notify();
+      }
+    },
+
+    deleteWorldInfoEntry: (entryId: number) => {
+      state.worldInfo = state.worldInfo.filter((e) => e.id !== entryId);
+      notify();
+    },
+
+    reorderWorldInfo: (orderedIds: number[]) => {
+      const entryMap = new Map(state.worldInfo.map(e => [e.id, e]));
+      state.worldInfo = orderedIds.map((id, idx) => {
+        const entry = entryMap.get(id);
+        if (entry) entry.order = idx;
+        return entry;
+      }).filter(Boolean) as WorldInfoEntry[];
+      // 保留不在排序列表中的条目
+      for (const entry of entryMap.values()) {
+        if (!orderedIds.includes(entry.id)) {
+          state.worldInfo.push(entry);
+        }
+      }
+      notify();
+    },
+
     // Import/Export
     exportData: () => ({
       chats: state.chats,
       roles: state.roles,
       settings: state.settings,
+      worldInfo: state.worldInfo,
     }),
     
-    importData: (data: { chats?: Chat[]; roles?: Role[]; settings?: Settings }) => {
+    importData: (data: { chats?: Chat[]; roles?: Role[]; settings?: Settings; worldInfo?: WorldInfoEntry[] }) => {
       if (data.chats) state.chats = data.chats;
       if (data.roles) state.roles = data.roles;
       if (data.settings) state.settings = data.settings;
+      if (data.worldInfo) state.worldInfo = data.worldInfo;
       notify();
     },
   };
 };
 
 const store = createStore();
-export const { subscribe, getState, addChat, updateChat, deleteChat, addMessage, updateMessage, deleteMessage, markRead, addRole, updateRole, deleteRole, updateSettings, resetSettings, exportData, importData } = store;
+export const { subscribe, getState, addChat, updateChat, deleteChat, addMessage, updateMessage, deleteMessage, markRead, addRole, updateRole, deleteRole, updateSettings, resetSettings, exportData, importData, addWorldInfoEntry, updateWorldInfoEntry, deleteWorldInfoEntry, reorderWorldInfo } = store;
 
 // 兼容旧版API
 export const messages = {

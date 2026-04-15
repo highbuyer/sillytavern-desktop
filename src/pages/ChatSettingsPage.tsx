@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStoreState, updateChat, deleteChat } from '../store/useStore';
+import { exportChatJSON, exportChatMarkdown, exportChatText } from '../services/chatExport';
 
 const ChatSettingsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -188,23 +189,27 @@ const ChatSettingsPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="form-section danger">
+        <div className="form-section">
           <h3>危险操作</h3>
           <div className="danger-actions">
             <button className="btn-danger" onClick={handleDelete}>
-              🗑️ 删除聊天
+              删除聊天
             </button>
-            <button className="btn-secondary" onClick={() => {
-              const data = JSON.stringify(chat, null, 2);
-              const blob = new Blob([data], { type: 'application/json' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `sillytavern-chat-${chat.id}.json`;
-              a.click();
-              URL.revokeObjectURL(url);
-            }}>
-              💾 导出聊天记录
+          </div>
+        </div>
+
+        <div className="form-section">
+          <h3>导出聊天记录</h3>
+          <p className="hint" style={{ marginBottom: '12px' }}>将聊天记录导出为文件，方便备份或分享</p>
+          <div className="export-buttons">
+            <button className="btn-secondary" onClick={() => exportChatJSON(chat)}>
+              导出 JSON
+            </button>
+            <button className="btn-secondary" onClick={() => exportChatMarkdown(chat, roles.find(r => r.id === chat.roleId)?.name)}>
+              导出 Markdown
+            </button>
+            <button className="btn-secondary" onClick={() => exportChatText(chat, roles.find(r => r.id === chat.roleId)?.name)}>
+              导出纯文本
             </button>
           </div>
         </div>
