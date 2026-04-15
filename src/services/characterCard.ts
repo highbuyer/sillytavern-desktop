@@ -4,7 +4,7 @@
  * 支持从 JSON 文件和 PNG 图片文件导入
  */
 
-import type { Role } from '../store/useStore';
+import type { Role, WorldInfoEntry, WIPosition } from '../store/useStore';
 
 // ==================== 类型定义 ====================
 
@@ -90,6 +90,8 @@ export interface ParsedCharacterCard {
   topP?: number;
   frequencyPenalty?: number;
   presencePenalty?: number;
+  /** 角色卡中嵌入的世界书数据（V2/V3 规范） */
+  character_book?: any;
 }
 
 // ==================== PNG 解析 ====================
@@ -212,6 +214,7 @@ function normalizeCharacterCard(json: any): ParsedCharacterCard | null {
       character_version: data.character_version || '',
       avatar: data.avatar || json.avatar || '',
       temperature: data.extensions?.depth_prompt?.prompt ? undefined : undefined,
+      character_book: data.character_book || json.character_book || undefined,
     };
   }
 
@@ -235,6 +238,7 @@ function normalizeCharacterCard(json: any): ParsedCharacterCard | null {
       topP: data.topP,
       frequencyPenalty: data.frequencyPenalty,
       presencePenalty: data.presencePenalty,
+      character_book: data.character_book || data.extensions?.character_book || undefined,
     };
   }
 
@@ -252,6 +256,7 @@ function normalizeCharacterCard(json: any): ParsedCharacterCard | null {
       creator: json.creator || '',
       character_version: json.character_version || '',
       avatar: json.avatar || '',
+      character_book: json.character_book || undefined,
     };
   }
 
@@ -308,6 +313,138 @@ function generateDefaultAvatar(name: string): string {
   const color = colors[name.charCodeAt(0) % colors.length];
   const initial = name.charAt(0).toUpperCase();
   return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect width="128" height="128" rx="64" fill="${color}"/><text x="64" y="75" text-anchor="middle" font-size="48" fill="white" font-family="sans-serif">${initial}</text></svg>`;
+}
+
+// ==================== 世界书转换 ====================
+
+/**
+ * 将 character_book 中的 position 数字映射为 WIPosition
+ * SillyTavern 标准: 0=before_char, 1=after_char, 2=before_example, 3=after_example, 4=before/after_last
+ */
+function mapCharBookPosition(pos: any): WIPosition {
+  if (!pos && pos !== 0) return 'before_char';
+  if (typeof pos === 'string') {
+    const valid: WIPosition[] = ['before_char', 'after_char', 'before_example', 'after_example', 'before_last', 'after_last'];
+    if (valid.includes(pos as WIPosition)) return pos as WIPosition;
+    if (pos === 'before') return 'before_char';
+    if (pos === 'after') return 'after_last';
+    return 'before_char';
+  }
+  if (typeof pos === 'number') {
+    switch (pos) {
+      case 0: return 'before_char';
+      case 1: return 'after_char';
+      case 2: return 'before_example';
+      case 3: return 'after_example';
+      case 4: return 'after_last';
+      case 5: return 'before_last';
+      default: return 'before_char';
+    }
+  }
+  return 'before_char';
+}
+
+/**
+ * 从角色卡的 character_book 字段提取世界书条目
+ * @param characterBook 角色卡中的 character_book 对象
+ * @param charName 角色名称（用作世界书名称的一部分）
+ * @returns { name: string, entries: WorldInfoEntry[] } 或 null
+ *
+ * character_book 结构（SillyTavern 标准）：
+ * {
+ *   name?: string,            // 世界书名称
+ *   entries?: {               // 条目集合（对象形式，key 为 uid 字符串）
+ *     "0": { uid, keys, content, ... },
+ *     "1": { uid, keys, content, ... },
+ *   }
+ * }
+ */
+export function extractWorldBookFromCharacterBook(
+  characterBook: any,
+  charName: string
+): { name: string; entries: WorldInfoEntry[] } | null {
+  if (!characterBook || typeof characterBook !== 'object') return null;
+
+  const entriesObj = characterBook.entries;
+  if (!entriesObj || typeof entriesObj !== 'object') return null;
+
+  // entries 可能是数组或对象
+  let rawEntries: any[] = [];
+  if (Array.isArray(entriesObj)) {
+    rawEntries = entriesObj;
+  } else {
+    rawEntries = Object.values(entriesObj);
+  }
+
+  if (rawEntries.length === 0) return null;
+
+  // 构建 group 映射（如果 character_book.groups 存在）
+  const groupsMap = new Map<number | string, string>();
+  if (Array.isArray(characterBook.groups)) {
+    for (const g of characterBook.groups) {
+      const gid = g.id ?? g.uid ?? g.index;
+      const gname = g.name || g.title || '';
+      if (gname && gid !== undefined) {
+        groupsMap.set(gid, gname);
+        groupsMap.set(String(gid), gname);
+      }
+    }
+  }
+
+  const now = new Date().toISOString();
+  const parsedEntries: WorldInfoEntry[] = rawEntries.map((entry: any, index: number) => {
+    const ext = entry.extensions || {};
+    const keys = entry.key || entry.keys || [];
+    const keyArray = Array.isArray(keys) ? keys : typeof keys === 'string' ? keys.split(',').map((k: string) => k.trim()).filter(Boolean) : [];
+    const secKeys = entry.keysecondary || entry.secondary_keys || entry.secondaryKeys || [];
+    const secondaryKeyArray = Array.isArray(secKeys) ? secKeys : typeof secKeys === 'string' ? secKeys.split(',').map((k: string) => k.trim()).filter(Boolean) : [];
+
+    // 解析 group
+    let groupVal = entry.group ?? ext.group ?? '';
+    if (typeof groupVal === 'number' && groupsMap.size > 0) {
+      const resolved = groupsMap.get(groupVal) || groupsMap.get(String(groupVal));
+      if (resolved) groupVal = resolved;
+      else groupVal = String(groupVal);
+    }
+    if (groupVal == null) groupVal = '';
+
+    return {
+      id: entry.uid ?? entry.id ?? Date.now() + index + Math.random(),
+      keys: keyArray,
+      secondaryKeys: secondaryKeyArray,
+      selectiveLogic: entry.selectiveLogic === 1 || entry.selectiveLogic === 'AND' ? 'AND' : 'OR',
+      content: entry.content || '',
+      comment: entry.comment || '',
+      name: entry.name || entry.comment || '',
+      enabled: entry.disable === true ? false : (entry.enabled !== false),
+      constant: entry.constant || false,
+      position: mapCharBookPosition(entry.position),
+      order: entry.order ?? entry.displayIndex ?? index,
+      depth: entry.depth ?? ext.depth ?? 4,
+      caseSensitive: entry.caseSensitive ?? ext.case_sensitive ?? false,
+      scanDepth: entry.scanDepth ?? ext.scan_depth ?? 10,
+      useProbability: entry.useProbability ?? ext.useProbability ?? false,
+      probability: entry.probability ?? ext.probability ?? 100,
+      preventRecursion: entry.preventRecursion ?? ext.prevent_recursion ?? false,
+      excludeRecursion: entry.excludeRecursion ?? ext.exclude_recursion ?? false,
+      cooldown: entry.cooldown ?? ext.cooldown ?? 0,
+      delay: entry.delay ?? ext.delay ?? 0,
+      group: String(groupVal).trim(),
+      groupOverride: entry.groupOverride ?? ext.group_override ?? false,
+      groupWeight: entry.groupWeight ?? ext.group_weight ?? 100,
+      scanRole: null,
+      role: null,
+      tokenBudget: entry.tokenBudget ?? 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+  });
+
+  const bookName = characterBook.name
+    ? `${charName} - ${characterBook.name}`
+    : `${charName} 世界书`;
+
+  return { name: bookName, entries: parsedEntries };
 }
 
 // ==================== 工具函数 ====================

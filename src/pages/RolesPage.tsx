@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useStoreState, addRole, updateRole, deleteRole, addChat } from '../store/useStore';
+import { useStoreState, addRole, updateRole, deleteRole, addChat, importWorldBook } from '../store/useStore';
 import RoleEditor from '../components/RoleEditor';
-import { importRoleCardFromFile, exportRoleCard, importRolesFromFile, exportAllRoles, parsedCardToRole } from '../services/characterCard';
+import { importRoleCardFromFile, exportRoleCard, importRolesFromFile, exportAllRoles, parsedCardToRole, extractWorldBookFromCharacterBook } from '../services/characterCard';
 
 const RolesPage: React.FC = () => {
   const navigate = useNavigate();
@@ -60,7 +60,20 @@ const RolesPage: React.FC = () => {
       const card = await importRoleCardFromFile();
       const roleData = parsedCardToRole(card);
       const newRoleId = addRole(roleData);
-      alert(`成功导入角色: ${card.name}`);
+
+      // 解析角色卡中嵌入的世界书
+      if (card.character_book) {
+        const worldBook = extractWorldBookFromCharacterBook(card.character_book, card.name);
+        if (worldBook && worldBook.entries.length > 0) {
+          importWorldBook(worldBook.name, worldBook.entries);
+          alert(`成功导入角色: ${card.name}\n同时导入了世界书「${worldBook.name}」（${worldBook.entries.length} 条）`);
+        } else {
+          alert(`成功导入角色: ${card.name}`);
+        }
+      } else {
+        alert(`成功导入角色: ${card.name}`);
+      }
+
       setEditingRole(newRoleId);
     } catch (error: any) {
       if (error.message?.includes('quota') || error.message?.includes('QuotaExceededError') || error.message?.includes('exceeded the quota')) {
