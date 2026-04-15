@@ -147,7 +147,20 @@ const RolesPage: React.FC = () => {
           {filteredRoles.map(role => (
             <div key={role.id} className="role-card">
               <div className="role-card-header">
-                <img src={role.avatar} alt={role.name} className="role-card-avatar" />
+                <img
+                  src={role.avatar}
+                  alt={role.name}
+                  className="role-card-avatar"
+                  onError={(e) => {
+                    const el = e.currentTarget;
+                    el.style.display = 'none';
+                    const fallback = el.parentElement?.querySelector('.role-card-avatar-fallback') as HTMLElement;
+                    if (fallback) fallback.style.display = 'flex';
+                  }}
+                />
+                <div className="role-card-avatar-fallback" style={{ display: 'none' }}>
+                  {(role.name || '?').charAt(0).toUpperCase()}
+                </div>
                 <div className="role-card-info">
                   <h3>{role.name}</h3>
                   <p className="role-description">{role.description}</p>

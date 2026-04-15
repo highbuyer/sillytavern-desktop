@@ -778,6 +778,20 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   background: var(--bg);
 }
 
+.role-card-avatar-fallback {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 24px;
+  font-weight: bold;
+  color: white;
+  background: var(--accent);
+}
+
 .role-card-info {
   flex: 1;
 }

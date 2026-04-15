@@ -86,7 +86,7 @@ const RoleEditor: React.FC<RoleEditorProps> = ({ role, onSave, onCancel }) => {
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0, width, height);
-          handleChange('avatar', canvas.toDataURL('image/jpeg', 0.85));
+          handleChange('avatar', canvas.toDataURL('image/png'));
         }
       };
       img.src = dataUri;
@@ -105,6 +105,12 @@ const RoleEditor: React.FC<RoleEditorProps> = ({ role, onSave, onCancel }) => {
 
   const handleClearAvatar = () => {
     handleChange('avatar', '');
+  };
+
+  const handleAvatarError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    e.currentTarget.style.display = 'none';
+    const fallback = e.currentTarget.parentElement?.querySelector('.avatar-fallback') as HTMLElement;
+    if (fallback) fallback.style.display = 'flex';
   };
 
   return (
@@ -138,10 +144,17 @@ const RoleEditor: React.FC<RoleEditorProps> = ({ role, onSave, onCancel }) => {
             {/* 当前头像预览 */}
             <div className="avatar-current-preview">
               {form.avatar ? (
-                <img src={form.avatar} alt="当前头像" className="avatar-preview-img" />
+                <img
+                  src={form.avatar}
+                  alt="当前头像"
+                  className="avatar-preview-img"
+                  onError={handleAvatarError}
+                />
               ) : (
                 <div className="avatar-preview-placeholder">?</div>
               )}
+              {/* 加载失败时显示 fallback */}
+              <div className="avatar-preview-placeholder avatar-fallback" style={{ display: 'none' }}>?</div>
             </div>
 
             {/* 操作按钮 */}

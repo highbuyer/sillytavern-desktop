@@ -326,10 +326,10 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 /**
- * 将 PNG 文件缩放并转换为 base64 data URI，用于头像显示
- * 限制最大尺寸为 512px，减少 localStorage 占用
+ * 将图片 buffer 缩放并转为 base64 data URI，用于头像显示
+ * 保持 PNG 格式以保留透明通道，限制最大 256px
  */
-function resizeImageToAvatar(buffer: ArrayBuffer, maxSize = 512): Promise<string> {
+function resizeImageToAvatar(buffer: ArrayBuffer, maxSize = 256): Promise<string> {
   return new Promise((resolve, reject) => {
     const blob = new Blob([buffer], { type: 'image/png' });
     const url = URL.createObjectURL(blob);
@@ -362,7 +362,8 @@ function resizeImageToAvatar(buffer: ArrayBuffer, maxSize = 512): Promise<string
         return;
       }
       ctx.drawImage(img, 0, 0, width, height);
-      resolve(canvas.toDataURL('image/jpeg', 0.85));
+      // 保持 PNG 格式保留透明通道
+      resolve(canvas.toDataURL('image/png'));
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);
@@ -431,9 +432,12 @@ export function importRoleCardFromFile(): Promise<ParsedCharacterCard> {
             reject(new Error('无法从 PNG 中提取角色卡数据。该 PNG 可能不包含角色卡信息。'));
             return;
           }
-          // 如果角色卡 JSON 中没有头像，用 PNG 图片本身作为头像
-          if (!card.avatar) {
+          // 始终用 PNG 图片本身作为头像（PNG角色卡的头像就是图片本身）
+          try {
             card.avatar = await resizeImageToAvatar(buffer);
+          } catch {
+            // 缩放失败，尝试用原始 base64
+            card.avatar = `data:image/png;base64,${arrayBufferToBase64(buffer)}`;
           }
           resolve(card);
         } else {
