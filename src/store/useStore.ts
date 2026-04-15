@@ -337,7 +337,13 @@ const createStore = () => {
 
   const notify = () => {
     // 传递新的 state 引用以确保 React 重新渲染
-    subscribers.forEach((fn) => fn({ ...state }));
+    // 关键：worldBooks 和 worldInfoSettings 需要新引用，否则 useMemo 依赖检测不到变化
+    const newState = {
+      ...state,
+      worldBooks: state.worldBooks ? { ...state.worldBooks } : state.worldBooks,
+      worldInfoSettings: { ...state.worldInfoSettings },
+    };
+    subscribers.forEach((fn) => fn(newState));
     // 自动保存到localStorage
     if (state.settings.storage.autoSave) {
       saveToStorage('sillytavern-chats', state.chats);
@@ -478,13 +484,15 @@ const createStore = () => {
 
     createWorldBook: (name: string) => {
       if (!name.trim() || state.worldBooks[name.trim()]) return;
-      state.worldBooks[name.trim()] = { name: name.trim(), entries: [] };
+      state.worldBooks = { ...state.worldBooks, [name.trim()]: { name: name.trim(), entries: [] } };
       state.activeWorldBook = name.trim();
       notify();
     },
 
     deleteWorldBook: (name: string) => {
-      delete state.worldBooks[name];
+      const newWB = { ...state.worldBooks };
+      delete newWB[name];
+      state.worldBooks = newWB;
       if (state.activeWorldBook === name) {
         const names = Object.keys(state.worldBooks);
         state.activeWorldBook = names.length > 0 ? names[0] : '';
@@ -497,9 +505,10 @@ const createStore = () => {
       if (state.worldBooks[newName.trim()]) return;
       const wb = state.worldBooks[oldName];
       if (!wb) return;
-      wb.name = newName.trim();
-      state.worldBooks[newName.trim()] = wb;
-      delete state.worldBooks[oldName];
+      const newWB = { ...state.worldBooks };
+      delete newWB[oldName];
+      newWB[newName.trim()] = { name: newName.trim(), entries: wb.entries };
+      state.worldBooks = newWB;
       if (state.activeWorldBook === oldName) {
         state.activeWorldBook = newName.trim();
       }
@@ -514,14 +523,17 @@ const createStore = () => {
       while (state.worldBooks[newName]) {
         newName = `${name} (副本 ${counter++})`;
       }
-      state.worldBooks[newName] = {
-        name: newName,
-        entries: wb.entries.map(e => ({
-          ...e,
-          id: Date.now() + Math.random(),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        })),
+      state.worldBooks = {
+        ...state.worldBooks,
+        [newName]: {
+          name: newName,
+          entries: wb.entries.map(e => ({
+            ...e,
+            id: Date.now() + Math.random(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          })),
+        },
       };
       state.activeWorldBook = newName;
       notify();
@@ -540,7 +552,7 @@ const createStore = () => {
 
     importWorldBook: (name: string, entries: WorldInfoEntry[]) => {
       if (!name.trim()) return;
-      state.worldBooks[name.trim()] = { name: name.trim(), entries };
+      state.worldBooks = { ...state.worldBooks, [name.trim()]: { name: name.trim(), entries } };
       state.activeWorldBook = name.trim();
       notify();
     },
@@ -555,7 +567,7 @@ const createStore = () => {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      wb.entries.push(newEntry);
+      wb.entries = [...wb.entries, newEntry];
       notify();
       return newEntry.id;
     },
@@ -563,9 +575,11 @@ const createStore = () => {
     updateWorldInfoEntry: (entryId: number, updates: Partial<WorldInfoEntry>) => {
       const wb = state.worldBooks[state.activeWorldBook];
       if (!wb) return;
-      const entry = wb.entries.find((e) => e.id === entryId);
-      if (entry) {
-        Object.assign(entry, updates, { updatedAt: new Date().toISOString() });
+      const idx = wb.entries.findIndex((e) => e.id === entryId);
+      if (idx !== -1) {
+        wb.entries = wb.entries.map((e, i) =>
+          i === idx ? { ...e, ...updates, updatedAt: new Date().toISOString() } : e
+        );
         notify();
       }
     },
@@ -581,23 +595,24 @@ const createStore = () => {
       const wb = state.worldBooks[state.activeWorldBook];
       if (!wb) return;
       const entryMap = new Map(wb.entries.map(e => [e.id, e]));
-      wb.entries = orderedIds.map((id, idx) => {
+      const reordered = orderedIds.map((id, idx) => {
         const entry = entryMap.get(id);
-        if (entry) entry.order = idx;
-        return entry;
+        if (entry) return { ...entry, order: idx };
+        return null;
       }).filter(Boolean) as WorldInfoEntry[];
       // 保留不在排序列表中的条目
       for (const entry of entryMap.values()) {
         if (!orderedIds.includes(entry.id)) {
-          wb.entries.push(entry);
+          reordered.push({ ...entry });
         }
       }
+      wb.entries = reordered;
       notify();
     },
 
     // WorldInfo settings operations
     updateWorldInfoSettings: (updates: Partial<WorldInfoSettings>) => {
-      Object.assign(state.worldInfoSettings, updates);
+      state.worldInfoSettings = { ...state.worldInfoSettings, ...updates };
       notify();
     },
 
