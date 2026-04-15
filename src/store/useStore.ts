@@ -233,7 +233,8 @@ const createStore = () => {
   };
 
   const notify = () => {
-    subscribers.forEach((fn) => fn(state));
+    // 传递新的 state 引用以确保 React 重新渲染
+    subscribers.forEach((fn) => fn({ ...state }));
     // 自动保存到localStorage
     if (state.settings.storage.autoSave) {
       saveToStorage('sillytavern-chats', state.chats);
