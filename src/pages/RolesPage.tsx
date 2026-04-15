@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStoreState, addRole, updateRole, deleteRole, addChat } from '../store/useStore';
 import RoleEditor from '../components/RoleEditor';
-import { importRoleCardFromFile, exportRoleCard, importRolesFromFile, exportAllRoles } from '../services/characterCard';
+import { importRoleCardFromFile, exportRoleCard, importRolesFromFile, exportAllRoles, parsedCardToRole } from '../services/characterCard';
 
 const RolesPage: React.FC = () => {
   const navigate = useNavigate();
@@ -46,19 +46,9 @@ const RolesPage: React.FC = () => {
   const handleImportSingle = async () => {
     try {
       const card = await importRoleCardFromFile();
-      const roleData = card.data;
-      const newRoleId = addRole({
-        name: roleData.name,
-        description: roleData.description || roleData.personality || '',
-        avatar: roleData.avatar || '',
-        prompt: roleData.system_prompt || roleData.first_mes || '',
-        temperature: roleData.temperature,
-        maxTokens: roleData.maxTokens,
-        topP: roleData.topP,
-        frequencyPenalty: roleData.frequencyPenalty,
-        presencePenalty: roleData.presencePenalty,
-      });
-      alert(`成功导入角色: ${roleData.name}`);
+      const roleData = parsedCardToRole(card);
+      const newRoleId = addRole(roleData);
+      alert(`成功导入角色: ${card.name}`);
       setEditingRole(newRoleId);
     } catch (error: any) {
       alert(error.message);

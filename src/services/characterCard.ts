@@ -1,12 +1,13 @@
 /**
- * TavernAI v2 角色卡服务
- * 支持导入/导出 JSON 格式角色卡
- * PNG 角色卡需要解析 PNG tEXt chunk（浏览器端可借助 canvas）
+ * TavernAI 角色卡服务
+ * 支持 V2 / V3 规格的角色卡
+ * 支持从 JSON 文件和 PNG 图片文件导入
  */
 
 import type { Role } from '../store/useStore';
 
-// TavernAI v2 角色卡 JSON 结构
+// ==================== 类型定义 ====================
+
 export interface TavernAIV2Card {
   spec: 'chara_card_v2';
   spec_version: '2.0';
@@ -25,7 +26,6 @@ export interface TavernAIV2Card {
     creator: string;
     character_version: string;
     extensions: Record<string, any>;
-    // 我们扩展的字段
     avatar?: string;
     temperature?: number;
     maxTokens?: number;
@@ -35,7 +35,231 @@ export interface TavernAIV2Card {
   };
 }
 
-// 将 Role 转换为 TavernAI v2 角色卡
+// V3 角色卡的 data 部分（和 V2 基本一致）
+export interface CharacterCardData {
+  name: string;
+  description: string;
+  personality: string;
+  scenario: string;
+  first_mes: string;
+  mes_example: string;
+  creator_notes: string;
+  system_prompt: string;
+  post_history_instructions: string;
+  tags: string[];
+  creator: string;
+  character_version: string;
+  alternate_greetings: string[];
+  extensions: Record<string, any>;
+  character_book?: any;
+  group_only_greetings?: any;
+}
+
+// V3 完整结构（顶层字段和 data 重复，兼容两种读取方式）
+export interface TavernAIV3Card {
+  spec: 'chara_card_v3';
+  spec_version: '3.0';
+  name: string;
+  description: string;
+  personality: string;
+  scenario: string;
+  first_mes: string;
+  mes_example: string;
+  creatorcomment: string;
+  avatar: string;
+  tags: string[];
+  data: CharacterCardData;
+  create_date?: string;
+}
+
+// 统一接口
+export interface ParsedCharacterCard {
+  name: string;
+  description: string;
+  personality: string;
+  scenario: string;
+  first_mes: string;
+  system_prompt: string;
+  creator_notes: string;
+  tags: string[];
+  creator: string;
+  character_version: string;
+  avatar: string;
+  temperature?: number;
+  maxTokens?: number;
+  topP?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
+}
+
+// ==================== PNG 解析 ====================
+
+/**
+ * 从 PNG 文件的 ArrayBuffer 中提取 tEXt chunk
+ * 返回 keyword -> text 的 Map
+ */
+function extractPNGTextChunks(buffer: ArrayBuffer): Map<string, string> {
+  const chunks = new Map<string, string>();
+  const view = new DataView(buffer);
+  let offset = 8; // 跳过 PNG 签名
+
+  while (offset < buffer.byteLength) {
+    const length = view.getUint32(offset);
+    offset += 4;
+
+    // 读取 chunk type (4 bytes)
+    const typeBytes = new Uint8Array(buffer, offset, 4);
+    const type = String.fromCharCode(...typeBytes);
+    offset += 4;
+
+    // 读取 chunk data
+    const data = new Uint8Array(buffer, offset, length);
+    offset += length;
+
+    // 跳过 CRC (4 bytes)
+    offset += 4;
+
+    if (type === 'tEXt') {
+      // tEXt: keyword\0text
+      const nullIdx = data.indexOf(0);
+      if (nullIdx !== -1) {
+        const keyword = new TextDecoder('latin1').decode(data.slice(0, nullIdx));
+        const text = new TextDecoder('latin1').decode(data.slice(nullIdx + 1));
+        chunks.set(keyword, text);
+      }
+    } else if (type === 'IEND') {
+      break;
+    }
+  }
+
+  return chunks;
+}
+
+/**
+ * 从 PNG 的 tEXt chunk 中提取角色卡数据
+ * 支持 base64 编码（标准）和 zlib 压缩（旧版）
+ */
+function extractCharaFromPNG(buffer: ArrayBuffer): ParsedCharacterCard | null {
+  const chunks = extractPNGTextChunks(buffer);
+
+  let rawText = chunks.get('chara');
+  if (!rawText) {
+    return null;
+  }
+
+  // 尝试 base64 解码（标准方式）
+  let jsonStr: string | null = null;
+  try {
+    // 浏览器环境用 atob，Node 用 Buffer
+    if (typeof atob !== 'undefined') {
+      const binaryStr = atob(rawText);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+      jsonStr = new TextDecoder('utf-8').decode(bytes);
+    } else if (typeof Buffer !== 'undefined') {
+      const buf = Buffer.from(rawText, 'base64');
+      jsonStr = buf.toString('utf-8');
+    }
+  } catch {
+    // base64 失败，尝试直接作为 UTF-8
+    jsonStr = rawText;
+  }
+
+  if (!jsonStr) return null;
+
+  try {
+    const json = JSON.parse(jsonStr);
+    return normalizeCharacterCard(json);
+  } catch {
+    // 可能是 zlib 压缩的（旧格式）
+    try {
+      // 尝试 zlib 解压
+      if (typeof require === 'function') {
+        const zlib = require('zlib');
+        const buf = Buffer.from(rawText, 'base64');
+        const decompressed = zlib.inflateRawSync(buf).toString('utf-8');
+        const json = JSON.parse(decompressed);
+        return normalizeCharacterCard(json);
+      }
+    } catch {
+      // 都失败了
+    }
+    return null;
+  }
+}
+
+/**
+ * 将任意格式的角色卡 JSON 标准化为统一格式
+ */
+function normalizeCharacterCard(json: any): ParsedCharacterCard | null {
+  if (!json || typeof json !== 'object') return null;
+
+  // V3 格式
+  if (json.spec === 'chara_card_v3' || json.spec_version === '3.0') {
+    const data = json.data || json;
+    return {
+      name: data.name || json.name || '',
+      description: data.description || '',
+      personality: data.personality || '',
+      scenario: data.scenario || '',
+      first_mes: data.first_mes || '',
+      system_prompt: data.system_prompt || '',
+      creator_notes: data.creator_notes || json.creatorcomment || '',
+      tags: data.tags || json.tags || [],
+      creator: data.creator || '',
+      character_version: data.character_version || '',
+      avatar: data.avatar || json.avatar || '',
+      temperature: data.extensions?.depth_prompt?.prompt ? undefined : undefined,
+    };
+  }
+
+  // V2 格式
+  if (json.spec === 'chara_card_v2' && json.data) {
+    const data = json.data;
+    return {
+      name: data.name || '',
+      description: data.description || '',
+      personality: data.personality || '',
+      scenario: data.scenario || '',
+      first_mes: data.first_mes || '',
+      system_prompt: data.system_prompt || '',
+      creator_notes: data.creator_notes || '',
+      tags: data.tags || [],
+      creator: data.creator || '',
+      character_version: data.character_version || '',
+      avatar: data.avatar || '',
+      temperature: data.temperature,
+      maxTokens: data.maxTokens,
+      topP: data.topP,
+      frequencyPenalty: data.frequencyPenalty,
+      presencePenalty: data.presencePenalty,
+    };
+  }
+
+  // 兼容：裸 data 对象（有 name 就认为是角色卡）
+  if (json.name) {
+    return {
+      name: json.name || '',
+      description: json.description || '',
+      personality: json.personality || '',
+      scenario: json.scenario || '',
+      first_mes: json.first_mes || '',
+      system_prompt: json.system_prompt || json.prompt || '',
+      creator_notes: json.creator_notes || json.creatorcomment || '',
+      tags: json.tags || [],
+      creator: json.creator || '',
+      character_version: json.character_version || '',
+      avatar: json.avatar || '',
+    };
+  }
+
+  return null;
+}
+
+// ==================== 转换函数 ====================
+
 export function roleToTavernCard(role: Role): TavernAIV2Card {
   return {
     spec: 'chara_card_v2',
@@ -65,23 +289,20 @@ export function roleToTavernCard(role: Role): TavernAIV2Card {
   };
 }
 
-// 将 TavernAI v2 角色卡转换为 Role
-export function tavernCardToRole(card: TavernAIV2Card): Omit<Role, 'id' | 'createdAt'> {
-  const data = card.data;
+export function parsedCardToRole(card: ParsedCharacterCard): Omit<Role, 'id' | 'createdAt'> {
   return {
-    name: data.name,
-    description: data.description || data.personality || '',
-    avatar: data.avatar || generateDefaultAvatar(data.name),
-    prompt: data.system_prompt || data.first_mes || data.description || '',
-    temperature: data.temperature,
-    maxTokens: data.maxTokens,
-    topP: data.topP,
-    frequencyPenalty: data.frequencyPenalty,
-    presencePenalty: data.presencePenalty,
+    name: card.name,
+    description: card.description || card.personality || '',
+    avatar: card.avatar || generateDefaultAvatar(card.name),
+    prompt: card.system_prompt || card.first_mes || card.description || '',
+    temperature: card.temperature,
+    maxTokens: card.maxTokens,
+    topP: card.topP,
+    frequencyPenalty: card.frequencyPenalty,
+    presencePenalty: card.presencePenalty,
   };
 }
 
-// 生成默认头像（SVG）
 function generateDefaultAvatar(name: string): string {
   const colors = ['#5B3FD9', '#00CED1', '#FF6B6B', '#4CAF50', '#FF9800', '#E91E63', '#2196F3', '#9C27B0'];
   const color = colors[name.charCodeAt(0) % colors.length];
@@ -89,29 +310,8 @@ function generateDefaultAvatar(name: string): string {
   return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect width="128" height="128" rx="64" fill="${color}"/><text x="64" y="75" text-anchor="middle" font-size="48" fill="white" font-family="sans-serif">${initial}</text></svg>`;
 }
 
-// 验证角色卡格式
-export function validateTavernCard(json: any): { valid: boolean; error?: string } {
-  if (!json || typeof json !== 'object') {
-    return { valid: false, error: '无效的 JSON 对象' };
-  }
+// ==================== 导出 ====================
 
-  // 检查 spec 字段
-  if (json.spec === 'chara_card_v2' && json.data) {
-    if (!json.data.name) {
-      return { valid: false, error: '角色卡缺少 name 字段' };
-    }
-    return { valid: true };
-  }
-
-  // 兼容：如果直接传入 data 对象
-  if (json.name) {
-    return { valid: true };
-  }
-
-  return { valid: false, error: '不是有效的 TavernAI 角色卡格式' };
-}
-
-// 导出角色卡为 JSON 文件
 export function exportRoleCard(role: Role): void {
   const card = roleToTavernCard(role);
   const json = JSON.stringify(card, null, 2);
@@ -126,49 +326,6 @@ export function exportRoleCard(role: Role): void {
   URL.revokeObjectURL(url);
 }
 
-// 从文件导入角色卡
-export function importRoleCardFromFile(): Promise<TavernAIV2Card> {
-  return new Promise((resolve, reject) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.onchange = async (e: Event) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) {
-        reject(new Error('没有选择文件'));
-        return;
-      }
-
-      try {
-        const text = await file.text();
-        const json = JSON.parse(text);
-
-        // 如果是 data 字段包裹的
-        if (json.spec === 'chara_card_v2') {
-          const validation = validateTavernCard(json);
-          if (!validation.valid) {
-            reject(new Error(validation.error));
-            return;
-          }
-          resolve(json);
-        } else {
-          // 直接就是 data
-          const validation = validateTavernCard(json);
-          if (!validation.valid) {
-            reject(new Error(validation.error));
-            return;
-          }
-          resolve({ spec: 'chara_card_v2', spec_version: '2.0', data: json });
-        }
-      } catch (error: any) {
-        reject(new Error(`导入失败: ${error.message}`));
-      }
-    };
-    input.click();
-  });
-}
-
-// 批量导出所有角色
 export function exportAllRoles(roles: Role[]): void {
   const data = roles.map(role => roleToTavernCard(role));
   const json = JSON.stringify(data, null, 2);
@@ -183,7 +340,58 @@ export function exportAllRoles(roles: Role[]): void {
   URL.revokeObjectURL(url);
 }
 
-// 批量导入角色
+// ==================== 导入 ====================
+
+/**
+ * 从文件导入角色卡（支持 .json 和 .png）
+ * @returns 解析后的统一角色卡数据
+ */
+export function importRoleCardFromFile(): Promise<ParsedCharacterCard> {
+  return new Promise((resolve, reject) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,.png,.charx';
+    input.onchange = async (e: Event) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) {
+        reject(new Error('没有选择文件'));
+        return;
+      }
+
+      try {
+        const fileName = file.name.toLowerCase();
+
+        if (fileName.endsWith('.png') || fileName.endsWith('.png')) {
+          // PNG 文件：提取 tEXt chunk 中的角色卡数据
+          const buffer = await file.arrayBuffer();
+          const card = extractCharaFromPNG(buffer);
+          if (!card) {
+            reject(new Error('无法从 PNG 中提取角色卡数据。该 PNG 可能不包含角色卡信息。'));
+            return;
+          }
+          resolve(card);
+        } else {
+          // JSON 文件
+          const text = await file.text();
+          const json = JSON.parse(text);
+          const card = normalizeCharacterCard(json);
+          if (!card) {
+            reject(new Error('无法识别的角色卡格式。需要包含 name 字段。'));
+            return;
+          }
+          resolve(card);
+        }
+      } catch (error: any) {
+        reject(new Error(`导入失败: ${error.message}`));
+      }
+    };
+    input.click();
+  });
+}
+
+/**
+ * 批量导入角色
+ */
 export function importRolesFromFile(): Promise<Omit<Role, 'id' | 'createdAt'>[]> {
   return new Promise((resolve, reject) => {
     const input = document.createElement('input');
@@ -200,22 +408,25 @@ export function importRolesFromFile(): Promise<Omit<Role, 'id' | 'createdAt'>[]>
         const text = await file.text();
         const json = JSON.parse(text);
 
-        let cards: TavernAIV2Card[];
+        let cards: ParsedCharacterCard[];
 
         if (Array.isArray(json)) {
-          // 批量导入
-          cards = json.map((item: any) =>
-            item.spec === 'chara_card_v2' ? item : { spec: 'chara_card_v2', spec_version: '2.0', data: item }
-          );
-        } else if (json.spec === 'chara_card_v2') {
-          // 单个导入
-          cards = [json];
+          cards = json.map((item: any) => normalizeCharacterCard(item)).filter(Boolean) as ParsedCharacterCard[];
         } else {
-          reject(new Error('不支持的文件格式'));
+          const card = normalizeCharacterCard(json);
+          if (!card) {
+            reject(new Error('无法识别的角色卡格式'));
+            return;
+          }
+          cards = [card];
+        }
+
+        if (cards.length === 0) {
+          reject(new Error('文件中没有有效的角色卡'));
           return;
         }
 
-        const roles = cards.map(card => tavernCardToRole(card));
+        const roles = cards.map(card => parsedCardToRole(card));
         resolve(roles);
       } catch (error: any) {
         reject(new Error(`导入失败: ${error.message}`));
