@@ -101,6 +101,7 @@ const ChatRoom: React.FC = () => {
       topP: role?.topP ?? settings.generation.topP,
       frequencyPenalty: role?.frequencyPenalty ?? settings.generation.frequencyPenalty,
       presencePenalty: role?.presencePenalty ?? settings.generation.presencePenalty,
+      proxyUrl: api.proxyUrl,
     };
 
     switch (provider) {

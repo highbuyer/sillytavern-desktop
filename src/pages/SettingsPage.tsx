@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStoreState, updateSettings, resetSettings, AIProvider } from '../store/useStore';
-import { MODEL_LIST, getModelsByProvider, testConnection, AIServiceConfig } from '../services/ai';
+import { MODEL_LIST, getModelsByProvider, testConnection, AIServiceConfig, fetchModels, AIModel } from '../services/ai';
 
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -10,10 +10,38 @@ const SettingsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'api' | 'generation' | 'ui' | 'storage'>('api');
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [fetchingModels, setFetchingModels] = useState(false);
+  const [availableModels, setAvailableModels] = useState<AIModel[]>(MODEL_LIST);
+  const [modelFetchError, setModelFetchError] = useState<string | null>(null);
 
   useEffect(() => {
     setForm(settings);
+    
+    // 页面加载时，如果有配置就尝试获取模型列表
+    const provider = settings.api.activeProvider;
+    const keyField = providerConfig.find(p => p.key === provider)?.keyField;
+    const hasKey = keyField ? !!settings.api[keyField as keyof typeof settings.api] : provider === 'ollama';
+    
+    if (hasKey && provider !== 'claude') {
+      // 延迟执行，确保form状态已更新
+      setTimeout(() => {
+        console.log('页面加载，尝试获取模型列表');
+        handleFetchModels();
+      }, 500);
+    }
   }, [settings]);
+
+  // 当API配置变化时，尝试获取模型列表
+  useEffect(() => {
+    const provider = form.api.activeProvider;
+    const keyField = providerConfig.find(p => p.key === provider)?.keyField;
+    const hasKey = keyField ? !!form.api[keyField as keyof typeof form.api] : provider === 'ollama';
+    
+    if (hasKey && form.api.activeProvider !== 'claude') {
+      // 对于非Claude的提供商，自动获取模型列表
+      handleFetchModels();
+    }
+  }, [form.api.activeProvider, form.api.openaiKey, form.api.claudeKey, form.api.openrouterKey]);
 
   const handleSave = () => {
     updateSettings(form);
@@ -94,6 +122,7 @@ const SettingsPage: React.FC = () => {
       apiUrl: form.api[`${form.api.activeProvider}Url` as keyof typeof form.api] as string,
       temperature: form.generation.temperature,
       maxTokens: 100,
+      proxyUrl: form.api.proxyUrl,
     };
 
     try {
@@ -103,6 +132,66 @@ const SettingsPage: React.FC = () => {
       setTestResult({ success: false, message: error.message });
     } finally {
       setTesting(false);
+    }
+  };
+
+  const handleFetchModels = async () => {
+    console.log('=== 开始获取模型列表 ===');
+    console.log('当前form状态:', form.api);
+    
+    const provider = form.api.activeProvider;
+    const keyField = providerConfig.find(p => p.key === provider)?.keyField;
+    const urlField = providerConfig.find(p => p.key === provider)?.urlField;
+    
+    console.log('当前后端:', provider);
+    console.log('密钥字段:', keyField);
+    console.log('URL字段:', urlField);
+    
+    // 检查是否需要API密钥
+    if (keyField) {
+      const apiKey = form.api[keyField as keyof typeof form.api] as string;
+      console.log('API密钥值:', apiKey ? `${apiKey.substring(0, 10)}...` : '空');
+      
+      if (!apiKey || !apiKey.trim()) {
+        setModelFetchError(`请先填写${provider}的API密钥`);
+        return;
+      }
+    }
+
+    const config: AIServiceConfig = {
+      provider,
+      model: form.api.activeModel,
+      apiKey: keyField ? form.api[keyField as keyof typeof form.api] as string : undefined,
+      apiUrl: form.api[urlField as keyof typeof form.api] as string,
+      proxyUrl: form.api.proxyUrl,
+    };
+
+    console.log('当前form状态 - openaiKey:', form.api.openaiKey ? '已填写' : '未填写');
+    console.log('当前form状态 - claudeKey:', form.api.claudeKey ? '已填写' : '未填写');
+    console.log('当前form状态 - openrouterKey:', form.api.openrouterKey ? '已填写' : '未填写');
+    console.log('当前form状态 - activeProvider:', form.api.activeProvider);
+    console.log('获取模型配置:', JSON.stringify(config, null, 2));
+    setFetchingModels(true);
+    setModelFetchError(null);
+
+    try {
+      const models = await fetchModels(config);
+      console.log('获取到的模型:', models);
+      if (models.length > 0) {
+        setAvailableModels(models);
+        // 如果当前模型不在列表中，自动选择第一个
+        const currentModelExists = models.some(m => m.id === form.api.activeModel);
+        if (!currentModelExists && models[0]) {
+          updateForm('api', 'activeModel', models[0].id);
+        }
+      } else {
+        setModelFetchError('未获取到可用模型。请检查API密钥和网络连接。');
+      }
+    } catch (error: any) {
+      console.error('获取模型失败详情:', error);
+      setModelFetchError(`获取模型失败: ${error.message}`);
+    } finally {
+      setFetchingModels(false);
     }
   };
 
@@ -173,15 +262,28 @@ const SettingsPage: React.FC = () => {
 
             {/* 模型选择 */}
             <div className="form-group">
-              <label>当前模型</label>
+              <div className="model-selector-header">
+                <label>当前模型</label>
+                <button 
+                  className="btn-secondary btn-small" 
+                  onClick={handleFetchModels}
+                  disabled={fetchingModels}
+                >
+                  {fetchingModels ? '获取中...' : '🔄 获取模型列表'}
+                </button>
+              </div>
               <div className="model-selector">
                 <select
                   value={form.api.activeModel}
                   onChange={(e) => updateForm('api', 'activeModel', e.target.value)}
                 >
-                  {getModelsByProvider(form.api.activeProvider).map(m => (
-                    <option key={m.id} value={m.id}>{m.name} (ctx: {m.maxContext?.toLocaleString() || '?'})</option>
-                  ))}
+                  {availableModels
+                    .filter(m => m.provider === form.api.activeProvider)
+                    .map(m => (
+                      <option key={m.id} value={m.id}>
+                        {m.name} (ctx: {m.maxContext?.toLocaleString() || '?'})
+                      </option>
+                    ))}
                   <option value="__custom__">自定义模型...</option>
                 </select>
                 {form.api.activeModel === '__custom__' && (
@@ -193,7 +295,27 @@ const SettingsPage: React.FC = () => {
                     style={{ marginTop: '8px' }}
                   />
                 )}
+                {modelFetchError && (
+                  <div className="error-message" style={{ marginTop: '8px', color: 'var(--danger)' }}>
+                    {modelFetchError}
+                  </div>
+                )}
+                <div className="hint">
+                  点击"获取模型列表"从API获取可用模型，或从预定义列表中选择
+                </div>
               </div>
+            </div>
+
+            {/* 网络代理配置 */}
+            <div className="form-group">
+              <label>网络代理 (可选)</label>
+              <input
+                type="text"
+                value={form.api.proxyUrl || ''}
+                onChange={(e) => updateForm('api', 'proxyUrl', e.target.value)}
+                placeholder="http://127.0.0.1:10808"
+              />
+              <div className="hint">设置HTTP/HTTPS代理，用于访问API服务。留空则使用系统代理或无代理。</div>
             </div>
 
             <div className="settings-divider" />

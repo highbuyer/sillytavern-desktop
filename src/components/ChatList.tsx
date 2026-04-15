@@ -83,22 +83,25 @@ const ChatList: React.FC = () => {
 
   return (
     <div className="chat-list">
-      <input 
-        className="search-input" 
-        placeholder="搜索聊天..." 
-        value={search} 
-        onChange={(e) => setSearch(e.target.value)} 
-      />
+      <div className="chat-list-header">
+        <span className="search-icon">🔍</span>
+        <input 
+          className="search-input" 
+          placeholder="搜索聊天..." 
+          value={search} 
+          onChange={(e) => setSearch(e.target.value)} 
+        />
+      </div>
       
       <div className="chat-toolbar">
         <button className="btn-primary" onClick={handleNewChat}>
-          <span>+</span> 新建聊天
+          <span>+</span> 新建
         </button>
         <button className="btn-secondary" onClick={() => navigate('/roles')}>
-          <span>👤</span> 角色管理
+          <span>👤</span> 角色
         </button>
-        <button className="btn-secondary" onClick={() => navigate('/worldinfo')}>
-          <span>📖</span> World Info
+        <button className="btn-secondary" onClick={() => navigate('/settings')}>
+          <span>⚙️</span> 设置
         </button>
       </div>
 

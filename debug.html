@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API测试</title>
+</head>
+<body>
+    <h1>API配置测试</h1>
+    
+    <div>
+        <h3>当前localStorage设置:</h3>
+        <pre id="settings"></pre>
+    </div>
+    
+    <div>
+        <h3>测试API调用:</h3>
+        <button onclick="testAPI()">测试API</button>
+        <pre id="result"></pre>
+    </div>
+
+    <script>
+        // 显示当前设置
+        const settings = localStorage.getItem('sillytavern-settings');
+        document.getElementById('settings').textContent = settings ? JSON.stringify(JSON.parse(settings), null, 2) : '无设置';
+        
+        async function testAPI() {
+            const settings = JSON.parse(localStorage.getItem('sillytavern-settings') || '{}');
+            const api = settings.api || {};
+            
+            document.getElementById('result').textContent = '正在测试...';
+            
+            try {
+                // 根据当前选择的后端测试
+                const provider = api.activeProvider || 'openai';
+                let url, headers = { 'Content-Type': 'application/json' };
+                
+                if (provider === 'openai') {
+                    url = `${api.openaiUrl || 'https://api.openai.com/v1'}/models`;
+                    if (api.openaiKey) {
+                        headers['Authorization'] = `Bearer ${api.openaiKey}`;
+                    }
+                } else if (provider === 'openrouter') {
+                    url = `${api.openrouterUrl || 'https://openrouter.ai/api/v1'}/models`;
+                    if (api.openrouterKey) {
+                        headers['Authorization'] = `Bearer ${api.openrouterKey}`;
+                    }
+                } else {
+                    document.getElementById('result').textContent = `不支持的后端: ${provider}`;
+                    return;
+                }
+                
+                console.log('测试URL:', url);
+                console.log('请求头:', headers);
+                
+                const response = await fetch(url, { headers });
+                const text = await response.text();
+                
+                let result = `状态码: ${response.status}\n`;
+                result += `响应头: ${JSON.stringify(Object.fromEntries(response.headers.entries()), null, 2)}\n`;
+                result += `响应内容: ${text}`;
+                
+                document.getElementById('result').textContent = result;
+                
+            } catch (error) {
+                document.getElementById('result').textContent = `错误: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

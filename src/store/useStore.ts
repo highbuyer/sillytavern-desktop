@@ -123,6 +123,7 @@ export type Settings = {
     openrouterKey: string;
     openrouterUrl: string;
     openrouterModel: string;
+    proxyUrl?: string;  // 代理URL
   };
   generation: {
     temperature: number;
@@ -175,6 +176,7 @@ const defaultSettings: Settings = {
     openrouterKey: '',
     openrouterUrl: 'https://openrouter.ai/api/v1',
     openrouterModel: 'openrouter/auto',
+    proxyUrl: '',
   },
   generation: {
     temperature: 0.7,

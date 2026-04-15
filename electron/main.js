@@ -180,6 +180,20 @@ function createWindow() {
 app.whenReady().then(() => {
   console.log('Electron app is ready');
 
+  // 设置全局代理 - 使用更可靠的方法
+  const proxyUrl = 'http://127.0.0.1:10808';
+  app.commandLine.appendSwitch('proxy-server', proxyUrl);
+  console.log('设置代理服务器:', proxyUrl);
+  
+  // 同时设置session代理
+  session.defaultSession.setProxy({
+    proxyRules: proxyUrl
+  }).then(() => {
+    console.log('Session代理设置成功');
+  }).catch(err => {
+    console.error('Session代理设置失败:', err);
+  });
+
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
