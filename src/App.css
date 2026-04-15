@@ -1737,45 +1737,86 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   color: var(--text);
 }
 
-/* --- Group Tabs --- */
-.wi-group-tabs {
+/* ─── 世界书选择器 ─── */
+.wi-book-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+
+.wi-book-bar-left {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px;
-  background: var(--card);
-  border-bottom: 1px solid var(--border);
-  overflow-x: auto;
-  scrollbar-width: none;
+  flex-wrap: wrap;
 }
 
-.wi-group-tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.wi-group-tab {
-  padding: 4px 14px;
-  border-radius: 14px;
+.wi-book-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 6px;
   font-size: 12px;
   border: 1px solid var(--border);
   background: transparent;
   color: var(--text-dim);
   cursor: pointer;
-  white-space: nowrap;
   transition: all 0.2s;
   font-family: inherit;
 }
 
-.wi-group-tab:hover {
+.wi-book-btn:hover:not(:disabled) {
   border-color: rgba(91, 63, 217, 0.4);
   color: var(--text);
+  background: rgba(91, 63, 217, 0.08);
 }
 
-.wi-group-tab.active {
-  background: rgba(91, 63, 217, 0.18);
+.wi-book-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.wi-book-btn-danger:hover:not(:disabled) {
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.wi-book-new {
+  background: rgba(91, 63, 217, 0.12);
+  border-color: rgba(91, 63, 217, 0.3);
+  color: #7c6fe0;
+}
+
+.wi-book-new:hover {
+  background: rgba(91, 63, 217, 0.22);
+}
+
+.wi-book-or {
+  font-size: 11px;
+  color: var(--text-dim);
+  opacity: 0.6;
+}
+
+.wi-book-select {
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--input-bg, var(--background));
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  min-width: 160px;
+  cursor: pointer;
+}
+
+.wi-book-select:focus {
+  outline: none;
   border-color: rgba(91, 63, 217, 0.5);
-  color: var(--accent);
-  font-weight: 600;
 }
 
 /* --- Column Headers --- */
@@ -1798,7 +1839,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .wi-column-headers .wi-col-toggle { width: 40px; flex-shrink: 0; }
 .wi-column-headers .wi-col-title { flex: 1.5; min-width: 80px; }
 .wi-column-headers .wi-col-keys { flex: 1; min-width: 80px; }
-.wi-column-headers .wi-col-group { width: 70px; flex-shrink: 0; text-align: center; }
 .wi-column-headers .wi-col-meta { width: 56px; flex-shrink: 0; text-align: center; }
 .wi-column-headers .wi-col-actions { width: 90px; flex-shrink: 0; text-align: right; }
 
@@ -1807,38 +1847,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   flex: 1;
   overflow-y: auto;
   padding: 0;
-}
-
-/* --- Group Section --- */
-.wi-group-section {
-  margin-bottom: 0;
-}
-
-.wi-group-section-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 16px;
-  background: rgba(91, 63, 217, 0.06);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-  user-select: none;
-}
-
-.wi-group-section-name {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--accent);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.wi-group-section-count {
-  font-size: 10px;
-  color: var(--text-dim);
-  background: rgba(255, 255, 255, 0.06);
-  padding: 1px 8px;
-  border-radius: 10px;
-  font-weight: 600;
 }
 
 /* --- Entry Card --- */
@@ -1877,7 +1885,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .wi-entry-header > .wi-col-toggle { width: 40px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
 .wi-entry-header > .wi-col-title { flex: 1.5; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; }
 .wi-entry-header > .wi-col-keys { flex: 1; min-width: 0; overflow: hidden; padding-right: 8px; }
-.wi-entry-header > .wi-col-group { width: 70px; flex-shrink: 0; text-align: center; overflow: hidden; }
 .wi-entry-header > .wi-col-meta { width: 56px; flex-shrink: 0; text-align: center; }
 .wi-entry-header > .wi-col-actions { width: 90px; flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
 
@@ -1931,25 +1938,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .wi-key-tag.wi-key-secondary {
   background: rgba(255, 152, 0, 0.12);
   color: #FFB74D;
-}
-
-/* --- Group Badge --- */
-.wi-group-badge {
-  display: inline-block;
-  background: rgba(91, 63, 217, 0.12);
-  color: var(--accent);
-  padding: 1px 6px;
-  border-radius: 6px;
-  font-size: 10px;
-  white-space: nowrap;
-  max-width: 65px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.wi-group-badge.wi-group-badge-empty {
-  background: transparent;
-  color: rgba(255, 255, 255, 0.2);
 }
 
 /* --- Meta Badges --- */
@@ -2561,10 +2549,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   }
 
   .wi-entry-header > .wi-col-meta {
-    display: none;
-  }
-
-  .wi-entry-header > .wi-col-group {
     display: none;
   }
 

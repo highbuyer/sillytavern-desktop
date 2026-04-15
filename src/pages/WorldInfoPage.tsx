@@ -5,6 +5,12 @@ import {
   addWorldInfoEntry,
   updateWorldInfoEntry,
   deleteWorldInfoEntry,
+  createWorldBook,
+  deleteWorldBook,
+  renameWorldBook,
+  duplicateWorldBook,
+  setActiveWorldBook,
+  importWorldBook,
   WorldInfoEntry,
   WIPosition,
   updateWorldInfoSettings,
@@ -525,49 +531,33 @@ const WorldInfoPage: React.FC = () => {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('order');
-  const [activeGroupFilter, setActiveGroupFilter] = useState<string>('__all__');
 
-  const { worldInfo, worldInfoSettings } = useStoreState();
-
-  const allGroups = useMemo(() => {
-    const s = new Set<string>();
-    worldInfo.forEach(e => { if (e.group?.trim()) s.add(e.group.trim()); });
-    return Array.from(s).sort();
-  }, [worldInfo]);
+  const state = useStoreState();
+  const worldBookNames = useMemo(() => Object.keys(state.worldBooks || {}).sort(), [state.worldBooks]);
+  const activeName = state.activeWorldBook || '';
+  const worldInfo = useMemo(() => {
+    const wb = (state.worldBooks || {})[activeName];
+    return wb ? wb.entries : [];
+  }, [state.worldBooks, activeName]);
 
   const filteredEntries = useMemo(() => {
-    let entries = [...worldInfo].filter(entry => {
-      if (activeGroupFilter === '__ungrouped__') {
-        if (entry.group?.trim()) return false;
-      } else if (activeGroupFilter !== '__all__') {
-        if (!entry.group || entry.group.trim() !== activeGroupFilter) return false;
-      }
-      if (!searchQuery) return true;
+    let entries = [...worldInfo];
+    if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      return (
+      entries = entries.filter(entry =>
         entry.keys.some(k => k.toLowerCase().includes(q)) ||
         entry.content.toLowerCase().includes(q) ||
         entry.comment.toLowerCase().includes(q) ||
         entry.name.toLowerCase().includes(q)
       );
-    });
+    }
     switch (sortMode) {
       case 'name': entries.sort((a, b) => (a.name || a.comment || '').localeCompare(b.name || b.comment || '')); break;
       case 'updated': entries.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()); break;
       default: entries.sort((a, b) => a.order - b.order);
     }
     return entries;
-  }, [worldInfo, activeGroupFilter, searchQuery, sortMode]);
-
-  const groupedEntries = useMemo(() => {
-    const groups: { [k: string]: WorldInfoEntry[] } = {};
-    filteredEntries.forEach(entry => {
-      const g = entry.group?.trim() || '__ungrouped__';
-      if (!groups[g]) groups[g] = [];
-      groups[g].push(entry);
-    });
-    return groups;
-  }, [filteredEntries]);
+  }, [worldInfo, searchQuery, sortMode]);
 
   const toggleExpand = (id: number) => {
     setExpandedIds(prev => {
@@ -593,7 +583,35 @@ const WorldInfoPage: React.FC = () => {
     });
   };
 
-  // Export
+  // ── World Book handlers ──
+  const handleNewWorldBook = () => {
+    const name = prompt('请输入世界书名称：');
+    if (name && name.trim()) {
+      createWorldBook(name.trim());
+    }
+  };
+
+  const handleRename = () => {
+    if (!activeName) return;
+    const newName = prompt('输入新名称：', activeName);
+    if (newName && newName.trim() && newName.trim() !== activeName) {
+      renameWorldBook(activeName, newName.trim());
+    }
+  };
+
+  const handleDuplicateBook = () => {
+    if (!activeName) return;
+    duplicateWorldBook(activeName);
+  };
+
+  const handleDelete = () => {
+    if (!activeName) return;
+    if (window.confirm(`确定删除世界书 "${activeName}" 吗？此操作不可撤销。`)) {
+      deleteWorldBook(activeName);
+    }
+  };
+
+  // ── Export (active world book as SillyTavern format) ──
   const mapPositionToST = (pos: string): number => {
     const map: Record<string, number> = {
       'before_char': 0, 'after_char': 1, 'before_example': 2, 'after_example': 3, 'before_last': 4, 'after_last': 4, 'before': 0, 'after': 4,
@@ -624,10 +642,11 @@ const WorldInfoPage: React.FC = () => {
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = 'sillytavern-worldinfo.json'; a.click();
+    a.href = url; a.download = `${activeName || 'worldinfo'}.json`; a.click();
     URL.revokeObjectURL(url);
   };
 
+  // ── Import (creates a new world book from file) ──
   const mapPosition = (pos: any): WIPosition => {
     if (!pos && pos !== 0) return 'before_char';
     const newPositions: WIPosition[] = ['before_char', 'after_char', 'before_example', 'after_example', 'before_last', 'after_last'];
@@ -648,7 +667,6 @@ const WorldInfoPage: React.FC = () => {
     input.type = 'file'; input.accept = '.json';
     input.onchange = (e: any) => {
       const file = e.target.files[0]; if (!file) return;
-      // 从文件名提取组名（去掉扩展名）
       const fileName = file.name.replace(/\.jsonl?$/i, '');
       const reader = new FileReader();
       reader.onload = (event) => {
@@ -675,14 +693,6 @@ const WorldInfoPage: React.FC = () => {
           else if (typeof data === 'object') { if (data.key || data.keys || data.content) imported = [data]; else imported = Object.values(data).filter((e: any) => e?.content); }
           if (!imported.length) { alert('未找到有效条目'); return; }
 
-          // ── 检查是否有任何条目自带 group ──
-          const hasAnyGroup = imported.some((entry: any) => {
-            const ext = entry.extensions || {};
-            return (entry.group && String(entry.group).trim()) || (ext.group && String(ext.group).trim());
-          });
-          // 如果没有条目有 group，用文件名作为默认组名
-          const defaultGroup = hasAnyGroup ? '' : fileName;
-
           // ── 安全读取 group 名称 ──
           const resolveGroup = (entry: any): string => {
             const ext = entry.extensions || {};
@@ -694,11 +704,10 @@ const WorldInfoPage: React.FC = () => {
               else groupVal = String(groupVal);
             }
             if (groupVal == null) return '';
-            const trimmed = String(groupVal).trim();
-            return trimmed || defaultGroup;
+            return String(groupVal).trim();
           };
 
-          let count = 0;
+          const parsedEntries: WorldInfoEntry[] = [];
           for (const entry of imported) {
             const ext = entry.extensions || {};
             const keys = entry.key || entry.keys || [];
@@ -706,13 +715,18 @@ const WorldInfoPage: React.FC = () => {
             const secKeys = entry.keysecondary || entry.secondary_keys || entry.secondaryKeys || [];
             const secondaryKeyArray = Array.isArray(secKeys) ? secKeys : typeof secKeys === 'string' ? secKeys.split(',').map((k: string) => k.trim()).filter(Boolean) : [];
 
-            addWorldInfoEntry({
-              keys: keyArray, secondaryKeys: secondaryKeyArray,
+            parsedEntries.push({
+              id: entry.uid || entry.id || Date.now() + Math.random(),
+              keys: keyArray,
+              secondaryKeys: secondaryKeyArray,
               selectiveLogic: entry.selectiveLogic === 1 || entry.selectiveLogic === 'AND' ? 'AND' : 'OR',
-              content: entry.content || '', comment: entry.comment || '', name: entry.name || entry.comment || '',
+              content: entry.content || '',
+              comment: entry.comment || '',
+              name: entry.name || entry.comment || '',
               enabled: entry.disable === true ? false : (entry.enabled !== false),
-              constant: entry.constant || false, position: mapPosition(entry.position),
-              order: entry.order ?? entry.displayIndex ?? worldInfo.length,
+              constant: entry.constant || false,
+              position: mapPosition(entry.position),
+              order: entry.order ?? entry.displayIndex ?? parsedEntries.length,
               depth: entry.depth ?? ext.depth ?? 4,
               caseSensitive: entry.caseSensitive ?? ext.case_sensitive ?? false,
               scanDepth: entry.scanDepth ?? ext.scan_depth ?? 10,
@@ -726,11 +740,15 @@ const WorldInfoPage: React.FC = () => {
               groupOverride: entry.groupOverride ?? ext.group_override ?? false,
               groupWeight: entry.groupWeight ?? ext.group_weight ?? 100,
               tokenBudget: entry.tokenBudget ?? 0,
-              scanRole: null, role: null,
+              scanRole: null,
+              role: null,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
             });
-            count++;
           }
-          alert(`成功导入 ${count} 条 World Info${defaultGroup ? ` → 分组: ${defaultGroup}` : ''}`);
+
+          importWorldBook(fileName, parsedEntries);
+          alert(`成功导入 ${parsedEntries.length} 条到世界书 "${fileName}"`);
         } catch (err: any) { alert('导入失败：' + err.message); }
       };
       reader.readAsText(file);
@@ -751,10 +769,29 @@ const WorldInfoPage: React.FC = () => {
         </div>
         <div className="wi-top-bar-right">
           <button className="btn-secondary btn-sm" onClick={() => navigate('/')}>← 返回</button>
-          <button className="btn-secondary btn-sm" onClick={handleExport} disabled={!worldInfo.length}>导出</button>
-          <button className="btn-secondary btn-sm" onClick={handleImport}>导入</button>
           <button className="btn-secondary btn-sm" onClick={() => setShowSettingsModal(true)}>⚙ 设置</button>
-          <button className="btn-primary btn-sm" onClick={() => setShowNewForm(true)}>+ 新建条目</button>
+          <button className="btn-primary btn-sm" onClick={() => setShowNewForm(true)} disabled={!activeName}>+ 新建条目</button>
+        </div>
+      </div>
+
+      {/* ─── 世界书选择器 ─── */}
+      <div className="wi-book-bar">
+        <div className="wi-book-bar-left">
+          <button className="wi-book-btn wi-book-new" onClick={handleNewWorldBook} title="新建世界书">
+            <i className="fa-solid fa-globe" /> 新建
+          </button>
+          <span className="wi-book-or">或</span>
+          <select className="wi-book-select" value={activeName} onChange={e => setActiveWorldBook(e.target.value)}>
+            <option value="">--- 选择以编辑 ---</option>
+            {worldBookNames.map(name => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+          <button className="wi-book-btn" onClick={handleImport} title="导入世界书">📥</button>
+          <button className="wi-book-btn" onClick={handleExport} title="导出当前世界书" disabled={!worldInfo.length}>📤</button>
+          <button className="wi-book-btn" onClick={handleRename} title="重命名" disabled={!activeName}>✏️</button>
+          <button className="wi-book-btn" onClick={handleDuplicateBook} title="复制世界书" disabled={!activeName}>📋</button>
+          <button className="wi-book-btn wi-book-btn-danger" onClick={handleDelete} title="删除世界书" disabled={!activeName}>🗑️</button>
         </div>
       </div>
 
@@ -767,6 +804,7 @@ const WorldInfoPage: React.FC = () => {
             placeholder="搜索关键词、内容或备注..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
+            disabled={!activeName}
           />
         </div>
         <div className="wi-toolbar-right">
@@ -778,22 +816,12 @@ const WorldInfoPage: React.FC = () => {
         </div>
       </div>
 
-      {/* ─── 分组筛选标签 ─── */}
-      <div className="wi-group-tabs">
-        <button className={`wi-group-tab ${activeGroupFilter === '__all__' ? 'active' : ''}`} onClick={() => setActiveGroupFilter('__all__')}>全部</button>
-        <button className={`wi-group-tab ${activeGroupFilter === '__ungrouped__' ? 'active' : ''}`} onClick={() => setActiveGroupFilter('__ungrouped__')}>未分组</button>
-        {allGroups.map(g => (
-          <button key={g} className={`wi-group-tab ${activeGroupFilter === g ? 'active' : ''}`} onClick={() => setActiveGroupFilter(g)}>{g}</button>
-        ))}
-      </div>
-
       {/* ─── 列标题 ─── */}
       <div className="wi-column-headers">
         <div className="wi-col wi-col-expand"></div>
         <div className="wi-col wi-col-toggle"></div>
         <div className="wi-col wi-col-title">Title / Memo</div>
         <div className="wi-col wi-col-keys">Keys</div>
-        <div className="wi-col wi-col-group">Group</div>
         <div className="wi-col wi-col-meta">Strategy</div>
         <div className="wi-col wi-col-meta">Position</div>
         <div className="wi-col wi-col-meta">Depth</div>
@@ -804,7 +832,15 @@ const WorldInfoPage: React.FC = () => {
 
       {/* ─── 条目列表 ─── */}
       <div className="wi-entries-list">
-        {filteredEntries.length === 0 && !showNewForm && (
+        {!activeName && (
+          <div className="wi-empty">
+            <div className="wi-empty-icon">📚</div>
+            <h2>请选择或创建一个世界书</h2>
+            <p>每个世界书是一个独立的词条集合，可以在不同角色/场景间切换使用。</p>
+          </div>
+        )}
+
+        {activeName && filteredEntries.length === 0 && !showNewForm && (
           <div className="wi-empty">
             <div className="wi-empty-icon">📖</div>
             <h2>还没有 World Info 条目</h2>
@@ -823,136 +859,111 @@ const WorldInfoPage: React.FC = () => {
           />
         )}
 
-        {/* 按分组渲染 */}
-        {Object.entries(groupedEntries)
-          .sort(([a], [b]) => {
-            if (a === '__ungrouped__') return 1;
-            if (b === '__ungrouped__') return -1;
-            return a.localeCompare(b);
-          })
-          .map(([groupName, entries]) => {
-            const isUngrouped = groupName === '__ungrouped__';
-            const displayName = isUngrouped ? '未分组' : groupName;
+        {/* 直接渲染条目列表（无分组） */}
+        {filteredEntries.map(entry => {
+          const isExpanded = expandedIds.has(entry.id);
+          const isEditing = editingId === entry.id;
+          const displayName = entry.name || entry.comment || (entry.keys[0] || '(无名称)');
+          const strategy = entry.constant ? '常驻' : (entry.selectiveLogic === 'AND' ? 'AND' : 'ANY');
 
-            return (
-              <div key={groupName} className="wi-group-section">
-                <div className="wi-group-section-header">
-                  <span className="wi-group-section-name">{displayName}</span>
-                  <span className="wi-group-section-count">{entries.length}</span>
+          return (
+            <div
+              key={entry.id}
+              className={`wi-entry-card ${!entry.enabled ? 'wi-entry-disabled' : ''} ${isExpanded ? 'wi-entry-expanded' : ''} ${entry.constant ? 'wi-entry-constant' : ''}`}
+            >
+              {/* 头部 */}
+              <div className="wi-entry-header" onClick={() => !isEditing && toggleExpand(entry.id)}>
+                <div className="wi-col wi-col-expand">
+                  <span className="wi-expand-arrow">{isExpanded ? '▼' : '▶'}</span>
                 </div>
-                {entries.map(entry => {
-                  const isExpanded = expandedIds.has(entry.id);
-                  const isEditing = editingId === entry.id;
-                  const displayName = entry.name || entry.comment || (entry.keys[0] || '(无名称)');
-                  const strategy = entry.constant ? '常驻' : (entry.selectiveLogic === 'AND' ? 'AND' : 'ANY');
-
-                  return (
-                    <div
-                      key={entry.id}
-                      className={`wi-entry-card ${!entry.enabled ? 'wi-entry-disabled' : ''} ${isExpanded ? 'wi-entry-expanded' : ''} ${entry.constant ? 'wi-entry-constant' : ''}`}
-                    >
-                      {/* 头部 */}
-                      <div className="wi-entry-header" onClick={() => !isEditing && toggleExpand(entry.id)}>
-                        <div className="wi-col wi-col-expand">
-                          <span className="wi-expand-arrow">{isExpanded ? '▼' : '▶'}</span>
-                        </div>
-                        <div className="wi-col wi-col-toggle" onClick={e => e.stopPropagation()}>
-                          <ToggleSwitch
-                            checked={entry.enabled}
-                            onChange={() => updateWorldInfoEntry(entry.id, { enabled: !entry.enabled })}
-                          />
-                        </div>
-                        <div className="wi-col wi-col-title">
-                          <span className="wi-entry-title">{displayName}</span>
-                        </div>
-                        <div className="wi-col wi-col-keys">
-                          <div className="wi-key-tags">
-                            {entry.keys.slice(0, 3).map((key, i) => (
-                              <span key={i} className="wi-key-tag">{key}</span>
-                            ))}
-                            {entry.keys.length > 3 && <span className="wi-key-tag wi-key-more">+{entry.keys.length - 3}</span>}
-                            {entry.keys.length === 0 && <span className="wi-key-tag wi-key-none">无关键词</span>}
-                          </div>
-                        </div>
-                        <div className="wi-col wi-col-group">
-                          {entry.group ? (
-                            <span className="wi-group-badge">{entry.group}</span>
-                          ) : (
-                            <span className="wi-group-badge wi-group-badge-empty">-</span>
-                          )}
-                        </div>
-                        <div className="wi-col wi-col-meta">
-                          <span className={`wi-meta-badge ${entry.constant ? 'wi-meta-constant' : ''}`}>{strategy}</span>
-                        </div>
-                        <div className="wi-col wi-col-meta">
-                          <span className="wi-meta-badge">{positionShortLabels[entry.position] || entry.position}</span>
-                        </div>
-                        <div className="wi-col wi-col-meta">
-                          <span className="wi-meta-badge">{entry.depth}</span>
-                        </div>
-                        <div className="wi-col wi-col-meta">
-                          <span className="wi-meta-badge">{entry.order}</span>
-                        </div>
-                        <div className="wi-col wi-col-meta">
-                          <span className="wi-meta-badge">{entry.useProbability ? `${entry.probability}%` : '100%'}</span>
-                        </div>
-                        <div className="wi-col wi-col-actions" onClick={e => e.stopPropagation()}>
-                          <button className="wi-action-btn" onClick={() => setEditingId(entry.id)} title="编辑">✏️</button>
-                          <button className="wi-action-btn" onClick={() => handleDuplicate(entry)} title="复制">📋</button>
-                          <button className="wi-action-btn wi-action-delete" onClick={() => {
-                            if (window.confirm('确定删除此条目？')) {
-                              deleteWorldInfoEntry(entry.id);
-                              setExpandedIds(prev => { const n = new Set(prev); n.delete(entry.id); return n; });
-                            }
-                          }} title="删除">🗑️</button>
-                        </div>
-                      </div>
-
-                      {/* 编辑面板 / 内容预览 */}
-                      {isExpanded && !isEditing && (
-                        <div className="wi-entry-body">
-                          <div className="wi-body-section">
-                            <div className="wi-body-label">内容</div>
-                            <pre className="wi-body-content">{entry.content || '(空)'}</pre>
-                          </div>
-                          {entry.secondaryKeys?.length > 0 && (
-                            <div className="wi-body-section">
-                              <div className="wi-body-label">次关键词</div>
-                              <div className="wi-key-tags">
-                                {entry.secondaryKeys.map((k, i) => (
-                                  <span key={i} className="wi-key-tag wi-key-secondary">{k}</span>
-                                ))}
-                              </div>
-                              <span className="wi-body-hint">逻辑: {entry.selectiveLogic === 'AND' ? 'AND' : 'ANY'}</span>
-                            </div>
-                          )}
-                          <div className="wi-body-details">
-                            <span>扫描深度: {entry.scanDepth}</span>
-                            <span>Token上限: {entry.tokenBudget || '不限'}</span>
-                            {entry.cooldown > 0 && <span>冷却: {entry.cooldown}轮</span>}
-                            {entry.delay > 0 && <span>延迟: {entry.delay}轮</span>}
-                          </div>
-                        </div>
-                      )}
-
-                      {isEditing && (
-                        <EntryDrawer
-                          key={`edit-${entry.id}`}
-                          entry={entry}
-                          onSave={handleSaveEdit}
-                          onClose={() => setEditingId(null)}
-                        />
-                      )}
-                    </div>
-                  );
-                })}
+                <div className="wi-col wi-col-toggle" onClick={e => e.stopPropagation()}>
+                  <ToggleSwitch
+                    checked={entry.enabled}
+                    onChange={() => updateWorldInfoEntry(entry.id, { enabled: !entry.enabled })}
+                  />
+                </div>
+                <div className="wi-col wi-col-title">
+                  <span className="wi-entry-title">{displayName}</span>
+                </div>
+                <div className="wi-col wi-col-keys">
+                  <div className="wi-key-tags">
+                    {entry.keys.slice(0, 3).map((key, i) => (
+                      <span key={i} className="wi-key-tag">{key}</span>
+                    ))}
+                    {entry.keys.length > 3 && <span className="wi-key-tag wi-key-more">+{entry.keys.length - 3}</span>}
+                    {entry.keys.length === 0 && <span className="wi-key-tag wi-key-none">无关键词</span>}
+                  </div>
+                </div>
+                <div className="wi-col wi-col-meta">
+                  <span className={`wi-meta-badge ${entry.constant ? 'wi-meta-constant' : ''}`}>{strategy}</span>
+                </div>
+                <div className="wi-col wi-col-meta">
+                  <span className="wi-meta-badge">{positionShortLabels[entry.position] || entry.position}</span>
+                </div>
+                <div className="wi-col wi-col-meta">
+                  <span className="wi-meta-badge">{entry.depth}</span>
+                </div>
+                <div className="wi-col wi-col-meta">
+                  <span className="wi-meta-badge">{entry.order}</span>
+                </div>
+                <div className="wi-col wi-col-meta">
+                  <span className="wi-meta-badge">{entry.useProbability ? `${entry.probability}%` : '100%'}</span>
+                </div>
+                <div className="wi-col wi-col-actions" onClick={e => e.stopPropagation()}>
+                  <button className="wi-action-btn" onClick={() => setEditingId(entry.id)} title="编辑">✏️</button>
+                  <button className="wi-action-btn" onClick={() => handleDuplicate(entry)} title="复制">📋</button>
+                  <button className="wi-action-btn wi-action-delete" onClick={() => {
+                    if (window.confirm('确定删除此条目？')) {
+                      deleteWorldInfoEntry(entry.id);
+                      setExpandedIds(prev => { const n = new Set(prev); n.delete(entry.id); return n; });
+                    }
+                  }} title="删除">🗑️</button>
+                </div>
               </div>
-            );
-          })}
+
+              {/* 编辑面板 / 内容预览 */}
+              {isExpanded && !isEditing && (
+                <div className="wi-entry-body">
+                  <div className="wi-body-section">
+                    <div className="wi-body-label">内容</div>
+                    <pre className="wi-body-content">{entry.content || '(空)'}</pre>
+                  </div>
+                  {entry.secondaryKeys?.length > 0 && (
+                    <div className="wi-body-section">
+                      <div className="wi-body-label">次关键词</div>
+                      <div className="wi-key-tags">
+                        {entry.secondaryKeys.map((k, i) => (
+                          <span key={i} className="wi-key-tag wi-key-secondary">{k}</span>
+                        ))}
+                      </div>
+                      <span className="wi-body-hint">逻辑: {entry.selectiveLogic === 'AND' ? 'AND' : 'ANY'}</span>
+                    </div>
+                  )}
+                  <div className="wi-body-details">
+                    <span>扫描深度: {entry.scanDepth}</span>
+                    <span>Token上限: {entry.tokenBudget || '不限'}</span>
+                    {entry.cooldown > 0 && <span>冷却: {entry.cooldown}轮</span>}
+                    {entry.delay > 0 && <span>延迟: {entry.delay}轮</span>}
+                  </div>
+                </div>
+              )}
+
+              {isEditing && (
+                <EntryDrawer
+                  key={`edit-${entry.id}`}
+                  entry={entry}
+                  onSave={handleSaveEdit}
+                  onClose={() => setEditingId(null)}
+                />
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* ─── 底部状态栏 ─── */}
       <div className="wi-status-bar">
+        <span>世界书: {activeName || '(无)'}</span>
         <span>总计: {worldInfo.length} 条</span>
         <span className="wi-stat-enabled">启用: {totalEnabled}</span>
         <span className="wi-stat-constant">常驻: {totalConstant}</span>

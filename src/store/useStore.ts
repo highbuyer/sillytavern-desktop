@@ -96,6 +96,11 @@ export type WorldInfoSettings = {
   };
 };
 
+export type WorldBook = {
+  name: string;
+  entries: WorldInfoEntry[];
+};
+
 const defaultWorldInfoSettings: WorldInfoSettings = {
   globalTokenBudget: 0,
   scanScope: {
@@ -281,8 +286,6 @@ const saveToStorage = (key: string, data: any) => {
   }
 };
 
-const defaultWorldInfo: WorldInfoEntry[] = [];
-
 const createStore = () => {
   const subscribers = new Set<(state: any) => void>();
   
@@ -298,11 +301,31 @@ const createStore = () => {
     worldInfo: { ...defaultSettings.worldInfo, ...(loadedSettings.worldInfo || {}) },
   };
 
+  // ── 迁移：从旧的 worldInfo 键迁移到 worldBooks ──
+  let loadedWorldBooks = loadFromStorage<Record<string, WorldBook>>('sillytavern-worldbooks', {});
+  let loadedActiveWorldBook = loadFromStorage<string>('sillytavern-active-worldbook', '');
+
+  // 检查旧数据是否存在
+  const oldWorldInfoRaw = localStorage.getItem('sillytavern-worldinfo');
+  if (oldWorldInfoRaw && Object.keys(loadedWorldBooks).length === 0) {
+    try {
+      const oldEntries: WorldInfoEntry[] = JSON.parse(oldWorldInfoRaw);
+      if (oldEntries && oldEntries.length > 0) {
+        loadedWorldBooks = { '默认世界书': { name: '默认世界书', entries: oldEntries } };
+        loadedActiveWorldBook = '默认世界书';
+      }
+    } catch (e) {
+      console.error('Migration error:', e);
+    }
+    localStorage.removeItem('sillytavern-worldinfo');
+  }
+
   let state = {
     chats: loadFromStorage<Chat[]>('sillytavern-chats', initialChats),
     roles: loadFromStorage<Role[]>('sillytavern-roles', defaultRoles),
     settings: mergedSettings,
-    worldInfo: loadFromStorage<WorldInfoEntry[]>('sillytavern-worldinfo', defaultWorldInfo),
+    worldBooks: loadedWorldBooks,
+    activeWorldBook: loadedActiveWorldBook,
     worldInfoSettings: loadFromStorage<WorldInfoSettings>('sillytavern-worldinfo-settings', defaultWorldInfoSettings),
   };
 
@@ -320,7 +343,8 @@ const createStore = () => {
       saveToStorage('sillytavern-chats', state.chats);
       saveToStorage('sillytavern-roles', state.roles);
       saveToStorage('sillytavern-settings', state.settings);
-      saveToStorage('sillytavern-worldinfo', state.worldInfo);
+      saveToStorage('sillytavern-worldbooks', state.worldBooks);
+      saveToStorage('sillytavern-active-worldbook', state.activeWorldBook);
       saveToStorage('sillytavern-worldinfo-settings', state.worldInfoSettings);
     }
   };
@@ -446,21 +470,100 @@ const createStore = () => {
       notify();
     },
     
-    // WorldInfo operations
+    // ── World Book Management ──
+    getActiveWorldInfo: (): WorldInfoEntry[] => {
+      const wb = state.worldBooks[state.activeWorldBook];
+      return wb ? wb.entries : [];
+    },
+
+    createWorldBook: (name: string) => {
+      if (!name.trim() || state.worldBooks[name.trim()]) return;
+      state.worldBooks[name.trim()] = { name: name.trim(), entries: [] };
+      state.activeWorldBook = name.trim();
+      notify();
+    },
+
+    deleteWorldBook: (name: string) => {
+      delete state.worldBooks[name];
+      if (state.activeWorldBook === name) {
+        const names = Object.keys(state.worldBooks);
+        state.activeWorldBook = names.length > 0 ? names[0] : '';
+      }
+      notify();
+    },
+
+    renameWorldBook: (oldName: string, newName: string) => {
+      if (!newName.trim() || oldName === newName.trim()) return;
+      if (state.worldBooks[newName.trim()]) return;
+      const wb = state.worldBooks[oldName];
+      if (!wb) return;
+      wb.name = newName.trim();
+      state.worldBooks[newName.trim()] = wb;
+      delete state.worldBooks[oldName];
+      if (state.activeWorldBook === oldName) {
+        state.activeWorldBook = newName.trim();
+      }
+      notify();
+    },
+
+    duplicateWorldBook: (name: string) => {
+      const wb = state.worldBooks[name];
+      if (!wb) return;
+      let newName = `${name} (副本)`;
+      let counter = 1;
+      while (state.worldBooks[newName]) {
+        newName = `${name} (副本 ${counter++})`;
+      }
+      state.worldBooks[newName] = {
+        name: newName,
+        entries: wb.entries.map(e => ({
+          ...e,
+          id: Date.now() + Math.random(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })),
+      };
+      state.activeWorldBook = newName;
+      notify();
+    },
+
+    setActiveWorldBook: (name: string) => {
+      if (state.worldBooks[name]) {
+        state.activeWorldBook = name;
+        notify();
+      }
+    },
+
+    getWorldBookNames: (): string[] => {
+      return Object.keys(state.worldBooks).sort();
+    },
+
+    importWorldBook: (name: string, entries: WorldInfoEntry[]) => {
+      if (!name.trim()) return;
+      state.worldBooks[name.trim()] = { name: name.trim(), entries };
+      state.activeWorldBook = name.trim();
+      notify();
+    },
+
+    // ── Entry CRUD (operates on active world book) ──
     addWorldInfoEntry: (entry: Omit<WorldInfoEntry, 'id' | 'createdAt' | 'updatedAt'>) => {
+      const wb = state.worldBooks[state.activeWorldBook];
+      if (!wb) return 0;
       const newEntry: WorldInfoEntry = {
         ...entry,
         id: Date.now(),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      state.worldInfo.push(newEntry);
+      wb.entries.push(newEntry);
       notify();
       return newEntry.id;
     },
 
     updateWorldInfoEntry: (entryId: number, updates: Partial<WorldInfoEntry>) => {
-      const entry = state.worldInfo.find((e) => e.id === entryId);
+      const wb = state.worldBooks[state.activeWorldBook];
+      if (!wb) return;
+      const entry = wb.entries.find((e) => e.id === entryId);
       if (entry) {
         Object.assign(entry, updates, { updatedAt: new Date().toISOString() });
         notify();
@@ -468,13 +571,17 @@ const createStore = () => {
     },
 
     deleteWorldInfoEntry: (entryId: number) => {
-      state.worldInfo = state.worldInfo.filter((e) => e.id !== entryId);
+      const wb = state.worldBooks[state.activeWorldBook];
+      if (!wb) return;
+      wb.entries = wb.entries.filter((e) => e.id !== entryId);
       notify();
     },
 
     reorderWorldInfo: (orderedIds: number[]) => {
-      const entryMap = new Map(state.worldInfo.map(e => [e.id, e]));
-      state.worldInfo = orderedIds.map((id, idx) => {
+      const wb = state.worldBooks[state.activeWorldBook];
+      if (!wb) return;
+      const entryMap = new Map(wb.entries.map(e => [e.id, e]));
+      wb.entries = orderedIds.map((id, idx) => {
         const entry = entryMap.get(id);
         if (entry) entry.order = idx;
         return entry;
@@ -482,7 +589,7 @@ const createStore = () => {
       // 保留不在排序列表中的条目
       for (const entry of entryMap.values()) {
         if (!orderedIds.includes(entry.id)) {
-          state.worldInfo.push(entry);
+          wb.entries.push(entry);
         }
       }
       notify();
@@ -499,15 +606,17 @@ const createStore = () => {
       chats: state.chats,
       roles: state.roles,
       settings: state.settings,
-      worldInfo: state.worldInfo,
+      worldBooks: state.worldBooks,
+      activeWorldBook: state.activeWorldBook,
       worldInfoSettings: state.worldInfoSettings,
     }),
     
-    importData: (data: { chats?: Chat[]; roles?: Role[]; settings?: Settings; worldInfo?: WorldInfoEntry[]; worldInfoSettings?: WorldInfoSettings }) => {
+    importData: (data: { chats?: Chat[]; roles?: Role[]; settings?: Settings; worldBooks?: Record<string, WorldBook>; activeWorldBook?: string; worldInfoSettings?: WorldInfoSettings }) => {
       if (data.chats) state.chats = data.chats;
       if (data.roles) state.roles = data.roles;
       if (data.settings) state.settings = data.settings;
-      if (data.worldInfo) state.worldInfo = data.worldInfo;
+      if (data.worldBooks) state.worldBooks = data.worldBooks;
+      if (data.activeWorldBook !== undefined) state.activeWorldBook = data.activeWorldBook;
       if (data.worldInfoSettings) state.worldInfoSettings = data.worldInfoSettings;
       notify();
     },
@@ -515,7 +624,13 @@ const createStore = () => {
 };
 
 const store = createStore();
-export const { subscribe, getState, addChat, updateChat, deleteChat, addMessage, updateMessage, deleteMessage, markRead, addRole, updateRole, deleteRole, updateSettings, resetSettings, exportData, importData, addWorldInfoEntry, updateWorldInfoEntry, deleteWorldInfoEntry, reorderWorldInfo, updateWorldInfoSettings } = store;
+export const {
+  subscribe, getState, addChat, updateChat, deleteChat, addMessage, updateMessage, deleteMessage, markRead,
+  addRole, updateRole, deleteRole, updateSettings, resetSettings, exportData, importData,
+  getActiveWorldInfo, createWorldBook, deleteWorldBook, renameWorldBook, duplicateWorldBook,
+  setActiveWorldBook, getWorldBookNames, importWorldBook,
+  addWorldInfoEntry, updateWorldInfoEntry, deleteWorldInfoEntry, reorderWorldInfo, updateWorldInfoSettings,
+} = store;
 
 // 兼容旧版API
 export const messages = {

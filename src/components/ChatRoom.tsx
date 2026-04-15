@@ -22,9 +22,13 @@ const ChatRoom: React.FC = () => {
   const abortRef = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const { chats, roles, settings, worldInfo, worldInfoSettings } = useStoreState();
+  const { chats, roles, settings, worldBooks, activeWorldBook, worldInfoSettings } = useStoreState();
   const chat = chats.find(c => String(c.id) === String(id));
   const role = roles.find(r => r.id === chat?.roleId) || roles[0];
+  const worldInfo = useMemo(() => {
+    const wb = (worldBooks || {})[activeWorldBook || ''];
+    return wb ? wb.entries : [];
+  }, [worldBooks, activeWorldBook]);
 
   // 触发历史 ref（跨渲染持久化）
   const triggerHistoryRef = React.useRef(new Map<number, { lastTriggeredTurn: number; triggerCount: number }>());

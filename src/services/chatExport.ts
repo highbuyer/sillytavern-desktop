@@ -103,7 +103,7 @@ export function exportChatText(chat: Chat, roleName?: string): void {
 /**
  * 导出所有聊天数据（完整备份）
  */
-export function exportAllData(data: { chats: Chat[]; roles: any[]; settings: any; worldInfo: any[] }): void {
+export function exportAllData(data: { chats: Chat[]; roles: any[]; settings: any; worldBooks?: any; activeWorldBook?: string; worldInfoSettings?: any }): void {
   const backup = {
     format: 'sillytavern-backup-v1',
     exportedAt: new Date().toISOString(),
