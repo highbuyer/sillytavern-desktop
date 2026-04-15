@@ -8,6 +8,7 @@ const RolesPage: React.FC = () => {
   const navigate = useNavigate();
   const { roles } = useStoreState();
   const [editingRole, setEditingRole] = useState<number | null>(null);
+  const [creatingRole, setCreatingRole] = useState(false);
   const [search, setSearch] = useState('');
   const [importing, setImporting] = useState(false);
 
@@ -28,12 +29,23 @@ const RolesPage: React.FC = () => {
       frequencyPenalty: 0.0,
       presencePenalty: 0.0,
     });
+    setCreatingRole(true);
     setEditingRole(newRoleId);
+  };
+
+  const handleCancelEdit = () => {
+    // 如果是新建的角色，取消时删除
+    if (creatingRole && editingRole !== null) {
+      deleteRole(editingRole);
+    }
+    setEditingRole(null);
+    setCreatingRole(false);
   };
 
   const handleSaveRole = (roleId: number, updates: any) => {
     updateRole(roleId, updates);
     setEditingRole(null);
+    setCreatingRole(false);
   };
 
   const handleDeleteRole = (roleId: number) => {
@@ -139,7 +151,7 @@ const RolesPage: React.FC = () => {
           <RoleEditor
             role={roles.find(r => r.id === editingRole)}
             onSave={(updates) => handleSaveRole(editingRole, updates)}
-            onCancel={() => setEditingRole(null)}
+            onCancel={handleCancelEdit}
           />
         </div>
       ) : (
