@@ -864,31 +864,93 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   color: var(--text);
 }
 
-.avatar-selector {
+/* 头像编辑器 */
+.avatar-editor {
   display: flex;
+  flex-direction: column;
   gap: 12px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
 }
 
-.avatar-option {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
+.avatar-current-preview {
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
   overflow: hidden;
-  cursor: pointer;
-  border: 2px solid transparent;
-  transition: border-color 0.2s;
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid var(--border);
 }
 
-.avatar-option.selected {
-  border-color: var(--accent);
-}
-
-.avatar-option img {
+.avatar-preview-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.avatar-preview-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  color: var(--text-dim);
+}
+
+.avatar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.avatar-color-presets {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.avatar-presets-label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.avatar-color-grid {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.avatar-color-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: transform 0.15s, border-color 0.15s;
+}
+
+.avatar-color-dot:hover {
+  transform: scale(1.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.avatar-url-section {
+  margin-top: 4px;
+}
+
+.avatar-url-section summary {
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.avatar-url-section summary:hover {
+  color: var(--text);
+}
+
+.avatar-url-section input {
+  width: 100%;
+  margin-top: 6px;
 }
 
 .params-grid {
