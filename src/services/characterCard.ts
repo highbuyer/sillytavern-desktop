@@ -310,6 +310,68 @@ function generateDefaultAvatar(name: string): string {
   return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect width="128" height="128" rx="64" fill="${color}"/><text x="64" y="75" text-anchor="middle" font-size="48" fill="white" font-family="sans-serif">${initial}</text></svg>`;
 }
 
+// ==================== 工具函数 ====================
+
+/**
+ * 将 ArrayBuffer 转换为 Base64 字符串
+ * 兼容浏览器和 Node.js 环境
+ */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+/**
+ * 将 PNG 文件缩放并转换为 base64 data URI，用于头像显示
+ * 限制最大尺寸为 512px，减少 localStorage 占用
+ */
+function resizeImageToAvatar(buffer: ArrayBuffer, maxSize = 512): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const blob = new Blob([buffer], { type: 'image/png' });
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement('canvas');
+      let { width, height } = img;
+
+      // 如果图片已经小于最大尺寸，直接用原始 base64
+      if (width <= maxSize && height <= maxSize) {
+        resolve(`data:image/png;base64,${arrayBufferToBase64(buffer)}`);
+        return;
+      }
+
+      // 等比缩放
+      if (width > height) {
+        height = Math.round((height * maxSize) / width);
+        width = maxSize;
+      } else {
+        width = Math.round((width * maxSize) / height);
+        height = maxSize;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('无法创建 Canvas 上下文'));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('图片加载失败'));
+    };
+    img.src = url;
+  });
+}
+
 // ==================== 导出 ====================
 
 export function exportRoleCard(role: Role): void {
@@ -361,13 +423,17 @@ export function importRoleCardFromFile(): Promise<ParsedCharacterCard> {
       try {
         const fileName = file.name.toLowerCase();
 
-        if (fileName.endsWith('.png') || fileName.endsWith('.png')) {
+        if (fileName.endsWith('.png')) {
           // PNG 文件：提取 tEXt chunk 中的角色卡数据
           const buffer = await file.arrayBuffer();
           const card = extractCharaFromPNG(buffer);
           if (!card) {
             reject(new Error('无法从 PNG 中提取角色卡数据。该 PNG 可能不包含角色卡信息。'));
             return;
+          }
+          // 如果角色卡 JSON 中没有头像，用 PNG 图片本身作为头像
+          if (!card.avatar) {
+            card.avatar = await resizeImageToAvatar(buffer);
           }
           resolve(card);
         } else {

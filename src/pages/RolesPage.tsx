@@ -51,7 +51,11 @@ const RolesPage: React.FC = () => {
       alert(`成功导入角色: ${card.name}`);
       setEditingRole(newRoleId);
     } catch (error: any) {
-      alert(error.message);
+      if (error.message?.includes('quota') || error.message?.includes('QuotaExceededError') || error.message?.includes('exceeded the quota')) {
+        alert('导入失败：头像图片太大，超出了浏览器存储限制。请尝试使用较小的角色卡图片。');
+      } else {
+        alert(error.message);
+      }
     }
   };
 
@@ -143,7 +147,7 @@ const RolesPage: React.FC = () => {
           {filteredRoles.map(role => (
             <div key={role.id} className="role-card">
               <div className="role-card-header">
-                <img src={role.avatar} alt={role.name} className="role-avatar" />
+                <img src={role.avatar} alt={role.name} className="role-card-avatar" />
                 <div className="role-card-info">
                   <h3>{role.name}</h3>
                   <p className="role-description">{role.description}</p>

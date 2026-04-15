@@ -208,8 +208,9 @@ const loadFromStorage = <T>(key: string, defaultValue: T): T => {
 const saveToStorage = (key: string, data: any) => {
   try {
     localStorage.setItem(key, JSON.stringify(data));
-  } catch (e) {
+  } catch (e: any) {
     console.error(`Error saving ${key} to storage:`, e);
+    throw new Error(`存储失败：${e.message || '可能超出浏览器存储限制'}`);
   }
 };
 
