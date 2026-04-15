@@ -12,13 +12,216 @@ import {
 } from '../store/useStore';
 
 const positionLabels: Record<WIPosition, string> = {
-  before_char: 'System 之后',
+  before_char: '角色定义之前',
   after_char: '角色定义之后',
   before_example: '示例消息之前',
   after_example: '示例消息之后',
   before_last: '最后消息之前',
-  after_last: '消息末尾',
+  after_last: '最后消息之后 (Author\'s Note)',
 };
+
+/** 高级设置表单字段子组件（新建和编辑共用） */
+const AdvancedSettingsSection = ({
+  form,
+  setForm,
+}: {
+  form: {
+    name: string;
+    secondaryKeys: string;
+    selectiveLogic: 'AND' | 'OR';
+    position: WIPosition;
+    depth: number;
+    useProbability: boolean;
+    probability: number;
+    preventRecursion: boolean;
+    excludeRecursion: boolean;
+    cooldown: number;
+    delay: number;
+    group: string;
+    groupOverride: boolean;
+    tokenBudget: number;
+  };
+  setForm: React.Dispatch<React.SetStateAction<any>>;
+}) => (
+  <details className="wi-advanced-details">
+    <summary>🔧 高级设置</summary>
+    <div className="wi-advanced-content">
+      {/* 条目名称 */}
+      <div className="form-group">
+        <label>条目名称</label>
+        <input
+          type="text"
+          value={form.name}
+          onChange={(e) => setForm((prev: any) => ({ ...prev, name: e.target.value }))}
+          placeholder="为条目起个名字，方便识别"
+        />
+      </div>
+
+      {/* 次关键词 + 组合逻辑 */}
+      <div className="form-group">
+        <label>次关键词（逗号分隔）</label>
+        <input
+          type="text"
+          value={form.secondaryKeys}
+          onChange={(e) => setForm((prev: any) => ({ ...prev, secondaryKeys: e.target.value }))}
+          placeholder="与主关键词组合匹配"
+        />
+      </div>
+      {form.secondaryKeys.trim() && (
+        <div className="form-group">
+          <label>组合逻辑</label>
+          <select
+            value={form.selectiveLogic}
+            onChange={(e) => setForm((prev: any) => ({ ...prev, selectiveLogic: e.target.value as 'AND' | 'OR' }))}
+          >
+            <option value="OR">OR (任一匹配)</option>
+            <option value="AND">AND (全部匹配)</option>
+          </select>
+        </div>
+      )}
+
+      {/* 注入位置 + 注入深度 */}
+      <div className="form-row">
+        <div className="form-group">
+          <label>注入位置</label>
+          <select
+            value={form.position}
+            onChange={(e) => setForm((prev: any) => ({ ...prev, position: e.target.value as WIPosition }))}
+          >
+            <option value="before_char">角色定义之前</option>
+            <option value="after_char">角色定义之后</option>
+            <option value="before_example">示例消息之前</option>
+            <option value="after_example">示例消息之后</option>
+            <option value="before_last">最后消息之前</option>
+            <option value="after_last">最后消息之后 (Author's Note)</option>
+          </select>
+        </div>
+        <div className="form-group">
+          <label>注入深度</label>
+          <input
+            type="number"
+            min="0"
+            max="999"
+            value={form.depth}
+            onChange={(e) => setForm((prev: any) => ({ ...prev, depth: parseInt(e.target.value) || 0 }))}
+          />
+          <div className="hint">0=按位置规则</div>
+        </div>
+      </div>
+
+      {/* 触发概率 */}
+      <div className="form-group">
+        <label>
+          <input
+            type="checkbox"
+            checked={form.useProbability}
+            onChange={(e) => setForm((prev: any) => ({ ...prev, useProbability: e.target.checked }))}
+          />
+          <span className="checkbox-label">启用概率触发</span>
+        </label>
+      </div>
+      {form.useProbability && (
+        <div className="form-group">
+          <label>触发概率 (0-100)</label>
+          <input
+            type="number"
+            min="0"
+            max="100"
+            value={form.probability}
+            onChange={(e) => setForm((prev: any) => ({ ...prev, probability: parseInt(e.target.value) || 100 }))}
+          />
+          <div className="hint">匹配时以该百分比概率决定是否触发</div>
+        </div>
+      )}
+
+      {/* 防递归 + 排除递归 */}
+      <div className="form-row">
+        <div className="form-group">
+          <label>
+            <input
+              type="checkbox"
+              checked={form.preventRecursion}
+              onChange={(e) => setForm((prev: any) => ({ ...prev, preventRecursion: e.target.checked }))}
+            />
+            <span className="checkbox-label">防递归</span>
+          </label>
+        </div>
+        <div className="form-group">
+          <label>
+            <input
+              type="checkbox"
+              checked={form.excludeRecursion}
+              onChange={(e) => setForm((prev: any) => ({ ...prev, excludeRecursion: e.target.checked }))}
+            />
+            <span className="checkbox-label">排除递归</span>
+          </label>
+        </div>
+      </div>
+
+      {/* 冷却 + 延迟 */}
+      <div className="form-row">
+        <div className="form-group">
+          <label>冷却轮数</label>
+          <input
+            type="number"
+            min="0"
+            max="999"
+            value={form.cooldown}
+            onChange={(e) => setForm((prev: any) => ({ ...prev, cooldown: parseInt(e.target.value) || 0 }))}
+          />
+          <div className="hint">触发后的冷却轮数</div>
+        </div>
+        <div className="form-group">
+          <label>延迟触发</label>
+          <input
+            type="number"
+            min="0"
+            max="999"
+            value={form.delay}
+            onChange={(e) => setForm((prev: any) => ({ ...prev, delay: parseInt(e.target.value) || 0 }))}
+          />
+          <div className="hint">匹配后延迟几轮才触发</div>
+        </div>
+      </div>
+
+      {/* 分组 + 分组覆盖 */}
+      <div className="form-row">
+        <div className="form-group">
+          <label>分组</label>
+          <input
+            type="text"
+            value={form.group}
+            onChange={(e) => setForm((prev: any) => ({ ...prev, group: e.target.value }))}
+            placeholder="分组名称"
+          />
+        </div>
+        <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '6px' }}>
+          <label>
+            <input
+              type="checkbox"
+              checked={form.groupOverride}
+              onChange={(e) => setForm((prev: any) => ({ ...prev, groupOverride: e.target.checked }))}
+            />
+            <span className="checkbox-label">分组覆盖</span>
+          </label>
+        </div>
+      </div>
+
+      {/* Token 上限 */}
+      <div className="form-group">
+        <label>Token 上限</label>
+        <input
+          type="number"
+          min="0"
+          max="99999"
+          value={form.tokenBudget}
+          onChange={(e) => setForm((prev: any) => ({ ...prev, tokenBudget: parseInt(e.target.value) || 0 }))}
+        />
+        <div className="hint">0=不限</div>
+      </div>
+    </div>
+  </details>
+);
 
 const WorldInfoPage: React.FC = () => {
   const navigate = useNavigate();
@@ -26,6 +229,7 @@ const WorldInfoPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingEntry, setEditingEntry] = useState<WorldInfoEntry | null>(null);
   const [showNewForm, setShowNewForm] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   const { worldInfo, worldInfoSettings } = useStoreState();
 
@@ -366,6 +570,9 @@ const WorldInfoPage: React.FC = () => {
           <button className="btn-secondary" onClick={handleImport}>
             导入
           </button>
+          <button className="btn-secondary" onClick={() => setShowSettingsModal(true)}>
+            ⚙️ 设置
+          </button>
           <button className="btn-primary" onClick={() => setShowNewForm(true)}>
             + 新建条目
           </button>
@@ -434,12 +641,12 @@ const WorldInfoPage: React.FC = () => {
                   value={newForm.position}
                   onChange={(e) => setNewForm(prev => ({ ...prev, position: e.target.value as WIPosition }))}
                 >
-                  <option value="before_char">System 之后</option>
+                  <option value="before_char">角色定义之前</option>
                   <option value="after_char">角色定义之后</option>
                   <option value="before_example">示例消息之前</option>
                   <option value="after_example">示例消息之后</option>
                   <option value="before_last">最后消息之前</option>
-                  <option value="after_last">消息末尾</option>
+                  <option value="after_last">最后消息之后 (Author's Note)</option>
                 </select>
               </div>
               <div className="form-group">
@@ -473,6 +680,10 @@ const WorldInfoPage: React.FC = () => {
                 <span className="checkbox-label">关键词区分大小写</span>
               </label>
             </div>
+            <AdvancedSettingsSection
+              form={newForm}
+              setForm={setNewForm}
+            />
             <div className="form-actions">
               <button className="btn-secondary" onClick={() => setShowNewForm(false)}>取消</button>
               <button className="btn-primary" onClick={handleCreate} disabled={!newForm.content.trim()}>创建条目</button>
@@ -520,12 +731,12 @@ const WorldInfoPage: React.FC = () => {
                   value={editForm.position}
                   onChange={(e) => setEditForm(prev => ({ ...prev, position: e.target.value as WIPosition }))}
                 >
-                  <option value="before_char">System 之后</option>
+                  <option value="before_char">角色定义之前</option>
                   <option value="after_char">角色定义之后</option>
                   <option value="before_example">示例消息之前</option>
                   <option value="after_example">示例消息之后</option>
                   <option value="before_last">最后消息之前</option>
-                  <option value="after_last">消息末尾</option>
+                  <option value="after_last">最后消息之后 (Author's Note)</option>
                 </select>
               </div>
               <div className="form-group">
@@ -559,6 +770,10 @@ const WorldInfoPage: React.FC = () => {
                 <span className="checkbox-label">区分大小写</span>
               </label>
             </div>
+            <AdvancedSettingsSection
+              form={editForm}
+              setForm={setEditForm}
+            />
             <div className="form-actions">
               <button className="btn-secondary" onClick={() => setEditingEntry(null)}>取消</button>
               <button className="btn-primary" onClick={handleSaveEdit}>保存修改</button>
@@ -632,16 +847,140 @@ const WorldInfoPage: React.FC = () => {
                     {entry.keys.length === 0 && <span className="hint">无关键词（仅常驻模式有效）</span>}
                   </div>
                 </div>
+                {/* 次关键词 */}
+                {entry.secondaryKeys && entry.secondaryKeys.length > 0 && (
+                  <div className="entry-section">
+                    <span className="entry-label">次关键词:</span>
+                    <div className="entry-keys-list">
+                      {entry.secondaryKeys.map((key, i) => (
+                        <span key={i} className="entry-key-badge" style={{ background: 'rgba(255, 152, 0, 0.15)', color: '#FF9800' }}>{key}</span>
+                      ))}
+                    </div>
+                    <span className="hint" style={{ marginLeft: '8px' }}>逻辑: {entry.selectiveLogic === 'AND' ? 'AND (全部匹配)' : 'OR (任一匹配)'}</span>
+                  </div>
+                )}
+                {/* 概率设置 */}
+                {entry.useProbability && (
+                  <div className="entry-section">
+                    <span className="entry-label">概率:</span> {entry.probability}%
+                  </div>
+                )}
+                {/* 冷却/延迟 */}
+                {(entry.cooldown > 0 || entry.delay > 0) && (
+                  <div className="entry-section">
+                    <span className="entry-label">时序:</span>
+                    {entry.cooldown > 0 && <span className="hint">冷却 {entry.cooldown} 轮</span>}
+                    {entry.cooldown > 0 && entry.delay > 0 && <span className="hint"> / </span>}
+                    {entry.delay > 0 && <span className="hint">延迟 {entry.delay} 轮</span>}
+                  </div>
+                )}
+                {/* 分组 */}
+                {entry.group && (
+                  <div className="entry-section">
+                    <span className="entry-label">分组:</span> {entry.group}
+                    {entry.groupOverride && <span className="entry-badge" style={{ marginLeft: '6px' }}>覆盖</span>}
+                  </div>
+                )}
+                {/* 注入深度 */}
+                {entry.depth > 0 && (
+                  <div className="entry-section">
+                    <span className="entry-label">注入深度:</span> {entry.depth}
+                  </div>
+                )}
+                {/* Token 上限 */}
+                {entry.tokenBudget > 0 && (
+                  <div className="entry-section">
+                    <span className="entry-label">Token 上限:</span> {entry.tokenBudget}
+                  </div>
+                )}
                 <div className="entry-details-grid">
                   <div><span className="entry-label">位置:</span> {positionLabels[entry.position] || entry.position}</div>
                   <div><span className="entry-label">扫描深度:</span> 最近 {entry.scanDepth} 条消息</div>
                   <div><span className="entry-label">大小写:</span> {entry.caseSensitive ? '区分' : '不区分'}</div>
                   <div><span className="entry-label">更新时间:</span> {new Date(entry.updatedAt).toLocaleString()}</div>
+                  {entry.preventRecursion && <div><span className="entry-label">防递归:</span> 是</div>}
+                  {entry.excludeRecursion && <div><span className="entry-label">排除递归:</span> 是</div>}
                 </div>
               </div>
             )}
           </div>
         ))}
+      </div>
+
+      {/* World Info 全局设置弹窗 */}
+      {showSettingsModal && (
+        <WorldInfoSettingsModal
+          settings={worldInfoSettings}
+          onSave={(newSettings) => {
+            updateWorldInfoSettings(newSettings);
+            setShowSettingsModal(false);
+          }}
+          onClose={() => setShowSettingsModal(false)}
+        />
+      )}
+    </div>
+  );
+};
+
+/** World Info 全局设置弹窗 */
+const WorldInfoSettingsModal = ({
+  settings,
+  onSave,
+  onClose,
+}: {
+  settings: WorldInfoSettings;
+  onSave: (s: WorldInfoSettings) => void;
+  onClose: () => void;
+}) => {
+  const [form, setForm] = useState<WorldInfoSettings>(settings);
+  return (
+    <div className="wi-settings-overlay" onClick={onClose}>
+      <div className="wi-settings-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="wi-settings-header">
+          <h3>⚙️ World Info 全局设置</h3>
+          <button className="btn-icon" onClick={onClose}>✕</button>
+        </div>
+        <div className="wi-settings-body">
+          <div className="form-group">
+            <label>全局 Token 预算</label>
+            <input
+              type="number"
+              min="0"
+              max="99999"
+              value={form.globalTokenBudget}
+              onChange={(e) => setForm(prev => ({ ...prev, globalTokenBudget: parseInt(e.target.value) || 0 }))}
+            />
+            <div className="hint">0=不限</div>
+          </div>
+          <div className="form-group">
+            <label>扫描范围</label>
+            <div className="wi-scope-grid">
+              {([
+                ['messages', '聊天消息'],
+                ['charDescription', '角色描述'],
+                ['charPersonality', '角色人设'],
+                ['scenario', '场景'],
+                ['creatorNotes', '作者备注'],
+              ] as const).map(([key, label]) => (
+                <label key={key} className="wi-scope-item">
+                  <input
+                    type="checkbox"
+                    checked={form.scanScope[key]}
+                    onChange={(e) => setForm(prev => ({
+                      ...prev,
+                      scanScope: { ...prev.scanScope, [key]: e.target.checked },
+                    }))}
+                  />
+                  <span className="checkbox-label">{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="form-actions" style={{ borderTop: '1px solid var(--border)' }}>
+          <button className="btn-secondary" onClick={onClose}>取消</button>
+          <button className="btn-primary" onClick={() => onSave(form)}>保存设置</button>
+        </div>
       </div>
     </div>
   );

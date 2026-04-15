@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useStoreState, addChat, addMessage, updateChat, updateMessage, deleteMessage, getState, WorldInfoSettings } from '../store/useStore';
+import { useStoreState, addChat, addMessage, updateChat, updateMessage, deleteMessage, getState, WorldInfoSettings, WorldInfoEntry } from '../store/useStore';
 import { streamChat, abortGeneration, MODEL_LIST, AIServiceConfig, ChatMessage } from '../services/ai';
 import { estimateTokens, estimateMessagesTokens, formatTokenCount, getContextUsage } from '../services/tokenCounter';
 import { scanWorldInfo, injectWorldInfo, ScanContext, ScanResult } from '../services/worldInfo';
@@ -17,6 +17,8 @@ const ChatRoom: React.FC = () => {
   const [generating, setGenerating] = useState(false);
   const [streamingMsgId, setStreamingMsgId] = useState<number | null>(null);
   const [showHotkeys, setShowHotkeys] = useState(false);
+  const [activeEntries, setActiveEntries] = useState<WorldInfoEntry[]>([]);
+  const [activeTokenCount, setActiveTokenCount] = useState(0);
   const abortRef = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -171,6 +173,9 @@ const ChatRoom: React.FC = () => {
       currentTurn: currentTurnRef.current,
     };
     const scanResult: ScanResult = scanWorldInfo(worldInfo, baseMessages, ctx);
+    // 更新激活条目状态供 UI 显示
+    setActiveEntries(scanResult.matched);
+    setActiveTokenCount(scanResult.totalTokens);
     return injectWorldInfo(scanResult, baseMessages, ctx.role);
   }, [buildMessages, worldInfo, worldInfoSettings, role]);
 
@@ -361,6 +366,21 @@ const ChatRoom: React.FC = () => {
             <div className="hotkey-item"><kbd>/</kbd><span>聚焦输入框</span></div>
             <div className="hotkey-item"><kbd>Shift+?</kbd><span>显示/隐藏快捷键</span></div>
           </div>
+        </div>
+      )}
+
+      {/* World Info 激活条目标签栏 */}
+      {activeEntries.length > 0 && (
+        <div className="world-info-active-bar">
+          <span className="wi-bar-label">World Info ({activeTokenCount} tok)</span>
+          {activeEntries.slice(0, 10).map(entry => (
+            <span key={entry.id} className="wi-active-tag" title={entry.comment || entry.name}>
+              {entry.name || entry.comment || entry.keys[0] || '未命名'}
+            </span>
+          ))}
+          {activeEntries.length > 10 && (
+            <span className="wi-active-tag more">+{activeEntries.length - 10}</span>
+          )}
         </div>
       )}
 

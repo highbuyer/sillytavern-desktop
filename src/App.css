@@ -1861,3 +1861,182 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .hotkey-item span {
   color: var(--text-dim);
 }
+
+/* ==================== World Info 高级设置 (details/summary) ==================== */
+.wi-advanced-details {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.wi-advanced-details summary {
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dim);
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid transparent;
+  transition: all 0.2s;
+  list-style: none;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wi-advanced-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.wi-advanced-details summary::before {
+  content: '▶';
+  font-size: 10px;
+  color: var(--text-dim);
+  transition: transform 0.2s;
+}
+
+.wi-advanced-details[open] summary {
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.wi-advanced-details[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.wi-advanced-details summary:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.wi-advanced-content {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.wi-advanced-content .form-group {
+  margin-bottom: 14px;
+}
+
+.wi-advanced-content .form-row {
+  margin-bottom: 0;
+}
+
+/* ==================== World Info 设置弹窗 ==================== */
+.wi-settings-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  animation: fadeIn 0.15s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.wi-settings-modal {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow-y: auto;
+  animation: scaleIn 0.2s ease-out;
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.wi-settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.wi-settings-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text);
+}
+
+.wi-settings-body {
+  padding: 20px;
+}
+
+.wi-scope-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.wi-scope-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.wi-scope-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.wi-scope-item input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+/* ==================== World Info 激活标签栏 (ChatRoom) ==================== */
+.world-info-active-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  font-size: 12px;
+  background: rgba(91, 63, 217, 0.05);
+}
+
+.wi-bar-label {
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.wi-active-tag {
+  background: rgba(91, 63, 217, 0.2);
+  color: var(--accent);
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: default;
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wi-active-tag.more {
+  background: rgba(91, 63, 217, 0.1);
+}
