@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import MarkdownRenderer from './MarkdownRenderer';
 
 interface Message {
   id: number;
@@ -31,14 +32,12 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   const contentRef = useRef<HTMLDivElement>(null);
   const editRef = useRef<HTMLTextAreaElement>(null);
 
-  // 自动滚动到流式消息底部
   useEffect(() => {
     if (isStreaming && contentRef.current) {
       contentRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
   }, [message.content, isStreaming]);
 
-  // 编辑时自动聚焦
   useEffect(() => {
     if (editing && editRef.current) {
       editRef.current.focus();
@@ -68,20 +67,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   const handleEditCancel = () => {
     setEditing(false);
-  };
-
-  const renderContent = () => {
-    const content = message.content
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
-      .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-      .replace(/\n/g, '<br/>');
-
-    return { __html: content };
   };
 
   return (
@@ -116,18 +101,20 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           </div>
         </div>
       ) : (
-        <div
-          ref={contentRef}
-          className="message-content"
-          dangerouslySetInnerHTML={renderContent()}
-        />
+        <div ref={contentRef} className="message-content">
+          {message.isUser ? (
+            <span style={{ whiteSpace: 'pre-wrap' }}>{message.content}</span>
+          ) : (
+            <MarkdownRenderer content={message.content} />
+          )}
+        </div>
       )}
 
       {message.attachments && message.attachments.length > 0 && (
         <div className="message-attachments">
           {message.attachments.map((att, idx) => (
             <div key={idx} className="attachment">
-              📎 附件 {idx + 1}
+              附件 {idx + 1}
             </div>
           ))}
         </div>
@@ -143,7 +130,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                   onClick={handleCopy}
                   title="复制消息"
                 >
-                  📋
+                  复制
                 </button>
                 {message.isUser && onEdit && (
                   <button
@@ -151,7 +138,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                     onClick={handleEditStart}
                     title="编辑消息"
                   >
-                    ✏️
+                    编辑
                   </button>
                 )}
                 {!message.isUser && !isStreaming && onRegenerate && (
@@ -160,7 +147,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                     onClick={onRegenerate}
                     title="重新生成"
                   >
-                    🔄
+                    重新生成
                   </button>
                 )}
                 {onDelete && (
@@ -169,7 +156,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                     onClick={onDelete}
                     title="删除消息"
                   >
-                    🗑️
+                    删除
                   </button>
                 )}
               </>

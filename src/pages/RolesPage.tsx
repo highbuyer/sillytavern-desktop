@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useStoreState, addRole, updateRole, deleteRole } from '../store/useStore';
+import { useStoreState, addRole, updateRole, deleteRole, addChat } from '../store/useStore';
 import RoleEditor from '../components/RoleEditor';
+import { importRoleCardFromFile, exportRoleCard, importRolesFromFile, exportAllRoles } from '../services/characterCard';
 
 const RolesPage: React.FC = () => {
   const navigate = useNavigate();
   const { roles } = useStoreState();
   const [editingRole, setEditingRole] = useState<number | null>(null);
   const [search, setSearch] = useState('');
+  const [importing, setImporting] = useState(false);
 
   const filteredRoles = roles.filter(role =>
     role.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -37,23 +39,71 @@ const RolesPage: React.FC = () => {
   const handleDeleteRole = (roleId: number) => {
     if (window.confirm('确定要删除这个角色吗？此操作无法撤销。')) {
       deleteRole(roleId);
+      if (editingRole === roleId) setEditingRole(null);
     }
   };
 
-  const handleImport = () => {
-    // 导入角色功能（占位）
-    alert('导入功能开发中...');
+  const handleImportSingle = async () => {
+    try {
+      const card = await importRoleCardFromFile();
+      const roleData = card.data;
+      const newRoleId = addRole({
+        name: roleData.name,
+        description: roleData.description || roleData.personality || '',
+        avatar: roleData.avatar || '',
+        prompt: roleData.system_prompt || roleData.first_mes || '',
+        temperature: roleData.temperature,
+        maxTokens: roleData.maxTokens,
+        topP: roleData.topP,
+        frequencyPenalty: roleData.frequencyPenalty,
+        presencePenalty: roleData.presencePenalty,
+      });
+      alert(`成功导入角色: ${roleData.name}`);
+      setEditingRole(newRoleId);
+    } catch (error: any) {
+      alert(error.message);
+    }
   };
 
-  const handleExport = () => {
-    const data = JSON.stringify(roles, null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'sillytavern-roles.json';
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleImportBatch = async () => {
+    setImporting(true);
+    try {
+      const importedRoles = await importRolesFromFile();
+      for (const roleData of importedRoles) {
+        addRole(roleData);
+      }
+      alert(`成功导入 ${importedRoles.length} 个角色`);
+    } catch (error: any) {
+      alert(error.message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleExportSingle = (roleId: number) => {
+    const role = roles.find(r => r.id === roleId);
+    if (role) {
+      exportRoleCard(role);
+    }
+  };
+
+  const handleExportAll = () => {
+    exportAllRoles(roles);
+  };
+
+  const handleUseRole = (roleId: number) => {
+    const role = roles.find(r => r.id === roleId);
+    const newChatId = addChat({
+      name: role?.name || '新聊天',
+      avatar: role?.avatar || '',
+      lastMessage: '',
+      unread: 0,
+      msgs: [],
+      starred: false,
+      tags: [],
+      roleId: roleId,
+    });
+    navigate(`/chat/${newChatId}`);
   };
 
   return (
@@ -64,14 +114,17 @@ const RolesPage: React.FC = () => {
           <button className="btn-primary" onClick={handleCreateRole}>
             + 创建角色
           </button>
-          <button className="btn-secondary" onClick={handleImport}>
-            📥 导入
+          <button className="btn-secondary" onClick={handleImportSingle} disabled={importing}>
+            导入角色卡
           </button>
-          <button className="btn-secondary" onClick={handleExport}>
-            📤 导出
+          <button className="btn-secondary" onClick={handleImportBatch} disabled={importing}>
+            {importing ? '导入中...' : '批量导入'}
           </button>
-          <button className="btn-back" onClick={() => navigate('/')}>
-            ← 返回
+          <button className="btn-secondary" onClick={handleExportAll}>
+            导出全部
+          </button>
+          <button className="btn-secondary" onClick={() => navigate('/')}>
+            返回
           </button>
         </div>
       </div>
@@ -106,30 +159,37 @@ const RolesPage: React.FC = () => {
                   <p className="role-description">{role.description}</p>
                 </div>
                 <div className="role-card-actions">
-                  <button 
-                    className="btn-icon" 
+                  <button
+                    className="btn-icon"
                     onClick={() => setEditingRole(role.id)}
                     title="编辑"
                   >
-                    ✏️
+                    编辑
                   </button>
-                  <button 
+                  <button
+                    className="btn-icon"
+                    onClick={() => handleExportSingle(role.id)}
+                    title="导出角色卡"
+                  >
+                    导出
+                  </button>
+                  <button
                     className="btn-icon delete"
                     onClick={() => handleDeleteRole(role.id)}
                     title="删除"
                   >
-                    🗑️
+                    删除
                   </button>
                 </div>
               </div>
-              
+
               <div className="role-card-body">
                 <div className="role-prompt-preview">
-                  {role.prompt.length > 100 
-                    ? `${role.prompt.substring(0, 100)}...` 
+                  {role.prompt.length > 100
+                    ? `${role.prompt.substring(0, 100)}...`
                     : role.prompt}
                 </div>
-                
+
                 <div className="role-params">
                   <span className="param">
                     <strong>温度:</strong> {role.temperature}
@@ -140,21 +200,13 @@ const RolesPage: React.FC = () => {
                   <span className="param">
                     <strong>Top-P:</strong> {role.topP}
                   </span>
-                  <span className="param">
-                    <strong>创建时间:</strong> {new Date(role.createdAt).toLocaleDateString()}
-                  </span>
                 </div>
               </div>
-              
+
               <div className="role-card-footer">
-                <button 
-                  className="btn-small"
-                  onClick={() => {
-                    // 使用此角色创建新聊天
-                    const chatId = Date.now();
-                    // 这里需要实现创建聊天逻辑
-                    navigate(`/chat/${chatId}`);
-                  }}
+                <button
+                  className="btn-small btn-primary"
+                  onClick={() => handleUseRole(role.id)}
                 >
                   使用此角色聊天
                 </button>
@@ -164,7 +216,7 @@ const RolesPage: React.FC = () => {
         </div>
       )}
 
-      {filteredRoles.length === 0 && (
+      {filteredRoles.length === 0 && !editingRole && (
         <div className="empty-state">
           <p>没有找到匹配的角色</p>
           <button className="btn-primary" onClick={handleCreateRole}>
