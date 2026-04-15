@@ -25,32 +25,7 @@ const SettingsPage: React.FC = () => {
         }
       } catch (e) { /* ignore */ }
     }
-    
-    // 页面加载时，如果有配置就尝试获取模型列表
-    const provider = settings.api.activeProvider;
-    const keyField = providerConfig.find(p => p.key === provider)?.keyField;
-    const hasKey = keyField ? !!settings.api[keyField as keyof typeof settings.api] : provider === 'ollama';
-    
-    if (hasKey && provider !== 'claude') {
-      // 延迟执行，确保form状态已更新
-      setTimeout(() => {
-        console.log('页面加载，尝试获取模型列表');
-        handleFetchModels();
-      }, 500);
-    }
   }, [settings]);
-
-  // 当API配置变化时，尝试获取模型列表
-  useEffect(() => {
-    const provider = form.api.activeProvider;
-    const keyField = providerConfig.find(p => p.key === provider)?.keyField;
-    const hasKey = keyField ? !!form.api[keyField as keyof typeof form.api] : provider === 'ollama';
-    
-    if (hasKey && form.api.activeProvider !== 'claude') {
-      // 对于非Claude的提供商，自动获取模型列表
-      handleFetchModels();
-    }
-  }, [form.api.activeProvider, form.api.openaiKey, form.api.claudeKey, form.api.openrouterKey]);
 
   // 同步代理设置到 Electron 主进程
   const syncProxyToElectron = (proxyUrl: string) => {
