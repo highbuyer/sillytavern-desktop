@@ -648,13 +648,14 @@ const WorldInfoPage: React.FC = () => {
     input.type = 'file'; input.accept = '.json';
     input.onchange = (e: any) => {
       const file = e.target.files[0]; if (!file) return;
+      // 从文件名提取组名（去掉扩展名）
+      const fileName = file.name.replace(/\.jsonl?$/i, '');
       const reader = new FileReader();
       reader.onload = (event) => {
         try {
           const data = JSON.parse(event.target?.result as string);
 
           // ── 构建组名映射表（支持 data.groups 数组格式） ──
-          // 某些格式有独立的 groups 数组，entry.group 是 group ID/index
           const groupsMap = new Map<number | string, string>();
           if (Array.isArray(data?.groups)) {
             for (const g of data.groups) {
@@ -662,11 +663,9 @@ const WorldInfoPage: React.FC = () => {
               const gname = g.name || g.title || '';
               if (gname) {
                 groupsMap.set(gid, gname);
-                // 同时存一份字符串 key，以防 ID 是字符串格式
                 groupsMap.set(String(gid), gname);
               }
             }
-            console.log('[WI Import] 发现 groups 数组:', groupsMap);
           }
 
           // ── 解析条目列表 ──
@@ -676,22 +675,27 @@ const WorldInfoPage: React.FC = () => {
           else if (typeof data === 'object') { if (data.key || data.keys || data.content) imported = [data]; else imported = Object.values(data).filter((e: any) => e?.content); }
           if (!imported.length) { alert('未找到有效条目'); return; }
 
+          // ── 检查是否有任何条目自带 group ──
+          const hasAnyGroup = imported.some((entry: any) => {
+            const ext = entry.extensions || {};
+            return (entry.group && String(entry.group).trim()) || (ext.group && String(ext.group).trim());
+          });
+          // 如果没有条目有 group，用文件名作为默认组名
+          const defaultGroup = hasAnyGroup ? '' : fileName;
+
           // ── 安全读取 group 名称 ──
           const resolveGroup = (entry: any): string => {
             const ext = entry.extensions || {};
-            // 1. 直接读 entry.group（SillyTavern 原生格式）
             let groupVal = entry.group;
-            // 2. 回退到 extensions.group（Character Book V2 格式）
             if (groupVal == null || groupVal === '') groupVal = ext.group;
-            // 3. 如果 groupVal 是数字，尝试通过 groupsMap 解析组名
             if (typeof groupVal === 'number' && groupsMap.size > 0) {
               const resolved = groupsMap.get(groupVal) || groupsMap.get(String(groupVal));
               if (resolved) groupVal = resolved;
               else groupVal = String(groupVal);
             }
-            // 4. 确保返回字符串，处理 falsy 值
             if (groupVal == null) return '';
-            return String(groupVal).trim();
+            const trimmed = String(groupVal).trim();
+            return trimmed || defaultGroup;
           };
 
           let count = 0;
@@ -701,9 +705,6 @@ const WorldInfoPage: React.FC = () => {
             const keyArray = Array.isArray(keys) ? keys : typeof keys === 'string' ? keys.split(',').map((k: string) => k.trim()).filter(Boolean) : [];
             const secKeys = entry.keysecondary || entry.secondary_keys || entry.secondaryKeys || [];
             const secondaryKeyArray = Array.isArray(secKeys) ? secKeys : typeof secKeys === 'string' ? secKeys.split(',').map((k: string) => k.trim()).filter(Boolean) : [];
-
-            const group = resolveGroup(entry);
-            console.log(`[WI Import] 条目 #${count}: group="${group}" (原始值: ${JSON.stringify(entry.group)}, ext.group: ${JSON.stringify(ext.group)})`);
 
             addWorldInfoEntry({
               keys: keyArray, secondaryKeys: secondaryKeyArray,
@@ -721,7 +722,7 @@ const WorldInfoPage: React.FC = () => {
               excludeRecursion: entry.excludeRecursion ?? ext.exclude_recursion ?? false,
               cooldown: entry.cooldown ?? ext.cooldown ?? 0,
               delay: entry.delay ?? ext.delay ?? 0,
-              group,
+              group: resolveGroup(entry),
               groupOverride: entry.groupOverride ?? ext.group_override ?? false,
               groupWeight: entry.groupWeight ?? ext.group_weight ?? 100,
               tokenBudget: entry.tokenBudget ?? 0,
@@ -729,7 +730,7 @@ const WorldInfoPage: React.FC = () => {
             });
             count++;
           }
-          alert(`成功导入 ${count} 条 World Info`);
+          alert(`成功导入 ${count} 条 World Info${defaultGroup ? ` → 分组: ${defaultGroup}` : ''}`);
         } catch (err: any) { alert('导入失败：' + err.message); }
       };
       reader.readAsText(file);
