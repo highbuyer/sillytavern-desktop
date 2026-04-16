@@ -478,9 +478,12 @@ const createStore = () => {
 
   const notify = () => {
     // 传递新的 state 引用以确保 React 重新渲染
-    // 关键：worldBooks 和 worldInfoSettings 需要新引用，否则 useMemo 依赖检测不到变化
+    // 关键：roles/chats/worldBooks 等数组/对象需要新引用，否则 useMemo 依赖检测不到变化
     const newState = {
       ...state,
+      chats: [...state.chats],
+      roles: [...state.roles],
+      settings: { ...state.settings },
       worldBooks: state.worldBooks ? { ...state.worldBooks } : state.worldBooks,
       worldInfoSettings: { ...state.worldInfoSettings },
       extensionEnabled: { ...state.extensionEnabled },
