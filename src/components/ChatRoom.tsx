@@ -1013,15 +1013,6 @@ const ChatRoom: React.FC = () => {
                   <button onClick={handleToggleLogprobs}>
                     <span>📊</span> {settings.generation.showLogprobs ? '隐藏 Token 概率' : 'Token 概率'}
                   </button>
-                  <button onClick={() => { handleMenuRegenerate(); setShowOptions(false); }} disabled={generating || chat.msgs.filter(m => !m.isUser).length === 0}>
-                    <span>🔄</span> 重新生成
-                  </button>
-                  <button onClick={() => { handleImpersonate(); setShowOptions(false); }} disabled={generating} title="让 AI 为您撰写消息">
-                    <span>👤</span> AI 帮答
-                  </button>
-                  <button onClick={() => { handleContinue(); setShowOptions(false); }} disabled={generating || chat.msgs.filter(m => !m.isUser && m.content.trim()).length === 0} title="续写上一条消息">
-                    <span>➤</span> 续写
-                  </button>
                   <hr />
                   <button
                     className="checkpoint-save-btn"
@@ -1075,6 +1066,16 @@ const ChatRoom: React.FC = () => {
                   <hr />
                   <button onClick={handleCloseChat}>
                     <span>❌</span> 关闭聊天
+                  </button>
+                  <hr />
+                  <button onClick={() => { handleMenuRegenerate(); setShowOptions(false); }} disabled={generating || chat.msgs.filter(m => !m.isUser).length === 0}>
+                    <span>🔄</span> 重新生成
+                  </button>
+                  <button onClick={() => { handleImpersonate(); setShowOptions(false); }} disabled={generating} title="让 AI 为您撰写消息">
+                    <span>👤</span> AI 帮答
+                  </button>
+                  <button onClick={() => { handleContinue(); setShowOptions(false); }} disabled={generating || chat.msgs.filter(m => !m.isUser && m.content.trim()).length === 0} title="续写上一条消息">
+                    <span>➤</span> 续写
                   </button>
                 </div>
               )}
