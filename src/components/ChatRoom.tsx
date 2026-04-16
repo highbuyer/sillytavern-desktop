@@ -35,6 +35,7 @@ const ChatRoom: React.FC = () => {
 
   // ── AI 帮答状态 ──
   const [impersonateMode, setImpersonateMode] = useState(false);
+  const continuePrefixRef = useRef('');
 
   // ── CFG 缩放状态 ──
   const [showCfgScale, setShowCfgScale] = useState(false);
@@ -353,106 +354,21 @@ const ChatRoom: React.FC = () => {
     });
   }, [buildAIConfig]);
 
-  // ── 续写：流式追加到最后一条 assistant 消息 ──
-  const doStreamContinue = useCallback(async (chatId: number, messages: ChatMessage[], targetMsgId: number, existingContent: string) => {
-    const config = buildAIConfig();
-    if (!config) {
-      setGenerating(false);
-      return;
-    }
 
-    await streamChat(config, messages, {
-      onToken: (token) => {
-        if (abortRef.current) {
-          abortGeneration();
-          return;
-        }
-        const currentChats = getState().chats;
-        const currentMsg = currentChats.find(c => c.id === chatId)?.msgs.find(m => m.id === targetMsgId);
-        if (currentMsg) {
-          updateMessage(chatId, targetMsgId, currentMsg.content + token);
-        }
-      },
-      onDone: (fullText) => {
-        // fullText 是 AI 生成的全部内容（不含前缀），追加到已有内容后
-        const currentChats = getState().chats;
-        const currentMsg = currentChats.find(c => c.id === chatId)?.msgs.find(m => m.id === targetMsgId);
-        if (currentMsg) {
-          // currentMsg.content 已经通过 onToken 逐步追加了，无需再次处理
-        }
-        setGenerating(false);
-        setStreamingMsgId(null);
-      },
-      onError: (error) => {
-        setGenerating(false);
-        setStreamingMsgId(null);
-      },
-    });
-  }, [buildAIConfig]);
 
   const handleSend = async () => {
     if (!chat || generating) return;
-
-    // AI 帮答模式
-    if (impersonateMode) {
-      const impersonateInput = input.trim();
-      if (!impersonateInput) return;
-      setInput('');
-      setImpersonateMode(false);
-      setGenerating(true);
-      abortRef.current = false;
-      currentTurnRef.current += 1;
-
-      // 创建一条用户消息，内容是 AI 生成的
-      const userMsgId = addMessage(chat.id, '', true);
-      if (userMsgId === null) { setGenerating(false); return; }
-      setStreamingMsgId(userMsgId);
-
-      // 构建特殊 system prompt：告诉 AI 扮演用户
-      const charName = role?.name || '角色';
-      const impersonateSystem = `你正在扮演"用户"这个角色，正在与名为"${charName}"的角色对话。\n\n当前的对话上下文：\n`;
-      const currentChats = getState().chats;
-      const chatMsgs = currentChats.find(c => c.id === chat.id)?.msgs || [];
-      const baseMessages = buildMessages(chatMsgs);
-      // 构建带帮答 system prompt 的消息列表
-      const impersonateMessages: ChatMessage[] = [
-        { role: 'system', content: impersonateSystem + `用户的指令：${impersonateInput}\n\n请以"用户"的口吻写一条消息（不要加引号，直接写内容，不要提及你是AI或你正在扮演）：` },
-        ...baseMessages.filter(m => m.role !== 'system'),
-      ];
-
-      const config = buildAIConfig();
-      if (!config) {
-        updateMessage(chat.id, userMsgId, '请先在设置中配置 API 密钥。');
-        setGenerating(false);
-        setStreamingMsgId(null);
-        return;
-      }
-
-      await streamChat(config, impersonateMessages, {
-        onToken: (token) => {
-          if (abortRef.current) { abortGeneration(); return; }
-          const c = getState().chats.find(c => c.id === chat.id)?.msgs.find(m => m.id === userMsgId);
-          if (c) updateMessage(chat.id, userMsgId, c.content + token);
-        },
-        onDone: (fullText) => {
-          updateMessage(chat.id, userMsgId, fullText || '(已停止生成)');
-          setGenerating(false);
-          setStreamingMsgId(null);
-        },
-        onError: (error) => {
-          updateMessage(chat.id, userMsgId, `错误: ${error.message}`);
-          setGenerating(false);
-          setStreamingMsgId(null);
-        },
-      });
-      return;
-    }
 
     // 正常发送模式
     if (!input.trim()) return;
     const userMessage = input.trim();
     setInput('');
     abortRef.current = false;
+
+    // 如果处于帮答模式，发送后退出
+    if (impersonateMode) {
+      setImpersonateMode(false);
+    }
 
     // 递增对话轮数
     currentTurnRef.current += 1;
@@ -505,7 +421,7 @@ const ChatRoom: React.FC = () => {
     await doStreamGenerate(chat.id, messages, newMsgId);
   };
 
-  // ── 续写功能 ──
+  // ── 续写功能（仿 SillyTavern: 删最后助手消息→提取文本→续写→追加） ──
   const handleContinue = async () => {
     if (!chat || generating) return;
     setShowOptions(false);
@@ -515,24 +431,120 @@ const ChatRoom: React.FC = () => {
     const lastAssistantMsg = msgs.find(m => !m.isUser && m.content.trim());
     if (!lastAssistantMsg) return;
 
+    // 保存原文作为续写前缀
+    const originalContent = lastAssistantMsg.content;
+    continuePrefixRef.current = originalContent;
+
+    // 删除最后一条助手消息（原版逻辑）
+    deleteMessage(chat.id, lastAssistantMsg.id);
+
     setGenerating(true);
-    setStreamingMsgId(lastAssistantMsg.id);
     abortRef.current = false;
 
+    // 重新添加空消息用于流式显示
+    const newMsgId = addMessage(chat.id, originalContent, false);
+    if (newMsgId === null) { setGenerating(false); return; }
+    setStreamingMsgId(newMsgId);
+
+    // 构建消息：不包含最后一条（已删除再添加的），加系统续写指令
     const currentChats = getState().chats;
     const chatMsgs = currentChats.find(c => c.id === chat.id)?.msgs || [];
-    // 发送当前所有消息（包含最后一条 assistant 消息作为已生成内容的上下文）
-    const messages = buildWorldInfoMessages(chatMsgs);
+    // 取倒数第二条之前的历史（不含刚添加的续写消息）
+    const historyMsgs = chatMsgs.slice(0, -1);
+    const messages = buildWorldInfoMessages(historyMsgs);
+    // 在末尾添加续写指令
+    messages.push({ role: 'system', content: '请继续上一条助手消息的内容，不要重复原文，直接接着写。' });
 
-    await doStreamContinue(chat.id, messages, lastAssistantMsg.id, lastAssistantMsg.content);
+    const config = buildAIConfig();
+    if (!config) {
+      updateMessage(chat.id, newMsgId, '请先在设置中配置 API 密钥。');
+      setGenerating(false);
+      setStreamingMsgId(null);
+      return;
+    }
+
+    // 重置 logprobs
+    logprobDataRef.current = [];
+    setLogprobData([]);
+
+    let continuedText = '';
+    await streamChat(config, messages, {
+      onToken: (token) => {
+        if (abortRef.current) { abortGeneration(); return; }
+        continuedText += token;
+        // 显示：原文 + 续写内容
+        updateMessage(chat.id, newMsgId, originalContent + continuedText);
+      },
+      onDone: (fullText) => {
+        // 追加：原文 + 续写文本
+        updateMessage(chat.id, newMsgId, originalContent + (continuedText || ''));
+        setGenerating(false);
+        setStreamingMsgId(null);
+        setLogprobData([...logprobDataRef.current]);
+      },
+      onError: (error) => {
+        // 出错时保留原文
+        updateMessage(chat.id, newMsgId, originalContent + `\n\n[续写错误: ${error.message}]`);
+        setGenerating(false);
+        setStreamingMsgId(null);
+      },
+      onLogprob: (data) => {
+        logprobDataRef.current.push(data);
+      },
+    });
   };
 
-  // ── AI 帮答 ──
-  const handleImpersonate = () => {
+  // ── AI 帮答（仿 SillyTavern: 直接生成→填入 textarea→不保存消息） ──
+  const handleImpersonate = async () => {
     if (!chat || generating) return;
     setShowOptions(false);
     setImpersonateMode(true);
-    setTimeout(() => inputRef.current?.focus(), 100);
+    setGenerating(true);
+    abortRef.current = false;
+
+    const charName = role?.name || '角色';
+    const userName = '用户';
+
+    // 构建消息：当前聊天历史 + impersonation system prompt
+    const currentChats = getState().chats;
+    const chatMsgs = currentChats.find(c => c.id === chat.id)?.msgs || [];
+    const baseMessages = buildMessages(chatMsgs);
+
+    // impersonation prompt（仿原版默认 prompt）
+    const impersonationPrompt = `以${userName}的视角写下一条回复，参考上面的聊天历史来把握${userName}的写作风格。不要以${charName}或系统的身份写，也不要描述${charName}的动作。只写出${userName}要说的话。`;
+
+    const impersonateMessages: ChatMessage[] = [
+      ...baseMessages,
+      { role: 'system', content: impersonationPrompt },
+    ];
+
+    const config = buildAIConfig();
+    if (!config) {
+      setImpersonateMode(false);
+      setGenerating(false);
+      return;
+    }
+
+    let impersonateText = '';
+    await streamChat(config, impersonateMessages, {
+      onToken: (token) => {
+        if (abortRef.current) { abortGeneration(); return; }
+        impersonateText += token;
+        // 流式填入 textarea
+        setInput(impersonateText);
+      },
+      onDone: (fullText) => {
+        setInput(fullText || '');
+        setImpersonateMode(true);
+        setGenerating(false);
+        setTimeout(() => inputRef.current?.focus(), 100);
+      },
+      onError: (error) => {
+        setImpersonateMode(false);
+        setGenerating(false);
+        setInput('');
+      },
+    });
   };
 
   // ── 新建聊天 ──
@@ -977,13 +989,6 @@ const ChatRoom: React.FC = () => {
 
       {/* ── 输入栏（仿 SillyTavern 原项目 #send_form 布局） ── */}
       <div className="input-area">
-        {/* AI 帮答提示 */}
-        {impersonateMode && (
-          <div className="impersonate-banner">
-            <span>🎭 AI 帮答模式 — 输入指令让 AI 代写用户消息</span>
-            <button className="btn-sm btn-secondary" onClick={() => setImpersonateMode(false)}>取消</button>
-          </div>
-        )}
         <div className="send-form">
           {/* 左侧：选项按钮 */}
           <div className="left-send-form">
@@ -1079,8 +1084,8 @@ const ChatRoom: React.FC = () => {
                 handleSend();
               }
             }}
-            placeholder={impersonateMode ? '输入指令，让 AI 代替你写消息...' : `发送消息给 ${role?.name || 'AI助手'}...`}
-            disabled={generating}
+            placeholder={impersonateMode ? 'AI 帮答已生成，编辑后按 Enter 发送...' : `发送消息给 ${role?.name || 'AI助手'}...`}
+            disabled={generating && !impersonateMode}
             rows={1}
             ref={inputRef}
           />
