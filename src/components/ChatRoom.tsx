@@ -619,7 +619,6 @@ const ChatRoom: React.FC = () => {
   // ── 重新生成（菜单调用） ──
   const handleMenuRegenerate = () => {
     if (!chat || generating) return;
-    setShowOptions(false);
     // 找到最后一条 assistant 消息
     const msgs = [...chat.msgs].reverse();
     const lastAssistantMsg = msgs.find(m => !m.isUser);
@@ -1013,6 +1012,9 @@ const ChatRoom: React.FC = () => {
                   </button>
                   <button onClick={handleToggleLogprobs}>
                     <span>📊</span> {settings.generation.showLogprobs ? '隐藏 Token 概率' : 'Token 概率'}
+                  </button>
+                  <button onClick={() => { handleMenuRegenerate(); setShowOptions(false); }} disabled={generating || chat.msgs.filter(m => !m.isUser).length === 0}>
+                    <span>🔄</span> 重新生成
                   </button>
                   <hr />
                   <button
