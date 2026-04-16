@@ -183,20 +183,26 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 }
 
 .chat-toolbar {
-  padding: 12px;
-  display: flex;
-  gap: 8px;
+  padding: 8px 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
   border-bottom: 1px solid var(--border);
-  flex-wrap: wrap;
+}
+
+.chat-toolbar .btn-primary {
+  grid-column: 1 / -1;
 }
 
 .chat-toolbar .btn-primary,
 .chat-toolbar .btn-secondary {
-  padding: 6px 12px;
+  padding: 8px 10px;
   font-size: 12px;
-  flex: 1;
-  min-width: 0;
+  display: flex;
+  align-items: center;
   justify-content: center;
+  gap: 4px;
+  white-space: nowrap;
 }
 
 .chat-item {
