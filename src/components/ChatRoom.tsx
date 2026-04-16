@@ -1016,6 +1016,12 @@ const ChatRoom: React.FC = () => {
                   <button onClick={() => { handleMenuRegenerate(); setShowOptions(false); }} disabled={generating || chat.msgs.filter(m => !m.isUser).length === 0}>
                     <span>🔄</span> 重新生成
                   </button>
+                  <button onClick={() => { handleImpersonate(); setShowOptions(false); }} disabled={generating} title="让 AI 为您撰写消息">
+                    <span>👤</span> AI 帮答
+                  </button>
+                  <button onClick={() => { handleContinue(); setShowOptions(false); }} disabled={generating || chat.msgs.filter(m => !m.isUser && m.content.trim()).length === 0} title="续写上一条消息">
+                    <span>➤</span> 续写
+                  </button>
                   <hr />
                   <button
                     className="checkpoint-save-btn"
@@ -1092,24 +1098,8 @@ const ChatRoom: React.FC = () => {
             ref={inputRef}
           />
 
-          {/* 右侧：操作按钮 */}
+          {/* 右侧：发送/停止按钮 */}
           <div className="right-send-form">
-            <button
-              className={`send-form-btn ${impersonateMode ? 'active' : ''}`}
-              onClick={handleImpersonate}
-              disabled={generating}
-              title="AI 帮答"
-            >
-              👤
-            </button>
-            <button
-              className="send-form-btn"
-              onClick={handleContinue}
-              disabled={generating || chat.msgs.filter(m => !m.isUser && m.content.trim()).length === 0}
-              title="续写"
-            >
-              ➤
-            </button>
             {generating ? (
               <button className="send-form-btn btn-stop-inline" onClick={handleStop} title="停止生成">
                 ⏹
