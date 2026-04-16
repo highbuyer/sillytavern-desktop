@@ -318,6 +318,37 @@ function generateDefaultAvatar(name: string): string {
 // ==================== 世界书转换 ====================
 
 /**
+ * 安全地将任意值转换为字符串
+ * 处理 null、undefined、对象、数组等非字符串类型
+ */
+function safeString(val: any): string {
+  if (val == null) return '';
+  if (typeof val === 'string') {
+    // 过滤掉明显的无效字符串值
+    if (val === 'undefined' || val === 'null' || val === '[object Object]' || val === '[object Array]') return '';
+    return val.trim();
+  }
+  if (Array.isArray(val)) {
+    // 数组：将每个元素转为字符串后用换行连接
+    const parts = val.map(v => safeString(v)).filter(Boolean);
+    return parts.join('\n');
+  }
+  if (typeof val === 'object') {
+    // 对象：尝试 JSON 序列化，如果结果无效则返回空字符串
+    try {
+      const json = JSON.stringify(val);
+      if (json === '{}' || json === '[]') return '';
+      return json;
+    } catch {
+      return '';
+    }
+  }
+  const str = String(val);
+  if (str === 'undefined' || str === 'null' || str === '[object Object]' || str === '[object Array]') return '';
+  return str.trim();
+}
+
+/**
  * 将 character_book 中的 position 数字映射为 WIPosition
  * SillyTavern 标准: 0=before_char, 1=after_char, 2=before_example, 3=after_example, 4=before/after_last
  */
@@ -413,9 +444,9 @@ export function extractWorldBookFromCharacterBook(
       keys: keyArray,
       secondaryKeys: secondaryKeyArray,
       selectiveLogic: entry.selectiveLogic === 1 || entry.selectiveLogic === 'AND' ? 'AND' : 'OR',
-      content: entry.content || '',
-      comment: entry.comment || '',
-      name: entry.name || entry.comment || '',
+      content: safeString(entry.content),
+      comment: safeString(entry.comment),
+      name: safeString(entry.name) || safeString(entry.comment),
       enabled: entry.disable === true ? false : (entry.enabled !== false),
       constant: entry.constant || false,
       position: mapCharBookPosition(entry.position),

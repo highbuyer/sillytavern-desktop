@@ -144,9 +144,12 @@ const ChatRoom: React.FC = () => {
     }
     const recentMsgs = chatMsgs.slice(-50);
     for (const msg of recentMsgs) {
+      // 防御性处理：确保 content 始终为有效字符串
+      const safeContent = typeof msg.content === 'string' ? msg.content : '';
+      if (!safeContent) continue; // 跳过空内容消息，避免 undefined/null 注入 prompt
       messages.push({
         role: msg.isUser ? 'user' : 'assistant',
-        content: msg.content,
+        content: safeContent,
       });
     }
     return messages;
@@ -185,11 +188,14 @@ const ChatRoom: React.FC = () => {
     // 替换 SillyTavern 宏 ({{char}}, {{user}} 等) 为实际值
     const enhanced = injectWorldInfo(scanResult, baseMessages, ctx.role);
     const charName = role?.name || '角色';
+    const userName = '用户';
     return enhanced.map(msg => ({
       ...msg,
-      content: msg.content
+      // 防御性处理：确保 content 始终为有效字符串再进行宏替换
+      content: (typeof msg.content === 'string' ? msg.content : '')
         .replace(/\{\{char\}\}/gi, charName)
-        .replace(/\{\{Char\}\}/g, charName),
+        .replace(/\{\{Char\}\}/g, charName)
+        .replace(/\{\{user\}\}/gi, userName),
     }));
   }, [buildMessages, worldInfo, worldInfoSettings, role]);
 

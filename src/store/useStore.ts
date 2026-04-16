@@ -303,6 +303,47 @@ const loadFromStorage = <T>(key: string, defaultValue: T): T => {
   return defaultValue;
 };
 
+/**
+ * 安全地将任意值转换为有效字符串
+ * 用于清洗世界书条目字段，防止 undefined/[object Object] 注入 prompt
+ */
+function sanitizeEntryField(val: any): string {
+  if (val == null) return '';
+  if (typeof val === 'string') {
+    if (val === 'undefined' || val === 'null' || val === '[object Object]' || val === '[object Array]') return '';
+    return val;
+  }
+  if (Array.isArray(val)) {
+    return val.map(v => sanitizeEntryField(v)).filter(Boolean).join('\n');
+  }
+  if (typeof val === 'object') {
+    try {
+      const json = JSON.stringify(val);
+      if (json === '{}' || json === '[]') return '';
+      return json;
+    } catch {
+      return '';
+    }
+  }
+  const str = String(val);
+  if (str === 'undefined' || str === 'null' || str === '[object Object]' || str === '[object Array]') return '';
+  return str;
+}
+
+/**
+ * 清洗世界书条目数组，确保所有字段类型安全
+ */
+function sanitizeWorldBookEntries(entries: WorldInfoEntry[]): WorldInfoEntry[] {
+  return entries.map(e => ({
+    ...e,
+    content: sanitizeEntryField(e.content),
+    comment: sanitizeEntryField(e.comment),
+    name: sanitizeEntryField(e.name),
+    keys: Array.isArray(e.keys) ? e.keys.filter((k): k is string => typeof k === 'string') : [],
+    secondaryKeys: Array.isArray(e.secondaryKeys) ? e.secondaryKeys.filter((k): k is string => typeof k === 'string') : [],
+  }));
+}
+
 const saveToStorage = (key: string, data: any) => {
   try {
     localStorage.setItem(key, JSON.stringify(data));
@@ -331,13 +372,26 @@ const createStore = () => {
   let loadedWorldBooks = loadFromStorage<Record<string, WorldBook>>('sillytavern-worldbooks', {});
   let loadedActiveWorldBook = loadFromStorage<string>('sillytavern-active-worldbook', '');
 
+  // 清洗所有已加载的世界书条目数据
+  const sanitizeWorldBooks = (books: Record<string, WorldBook>): Record<string, WorldBook> => {
+    const sanitized: Record<string, WorldBook> = {};
+    for (const [key, book] of Object.entries(books)) {
+      sanitized[key] = {
+        ...book,
+        entries: book.entries ? sanitizeWorldBookEntries(book.entries) : [],
+      };
+    }
+    return sanitized;
+  };
+  loadedWorldBooks = sanitizeWorldBooks(loadedWorldBooks);
+
   // 检查旧数据是否存在
   const oldWorldInfoRaw = localStorage.getItem('sillytavern-worldinfo');
   if (oldWorldInfoRaw && Object.keys(loadedWorldBooks).length === 0) {
     try {
       const oldEntries: WorldInfoEntry[] = JSON.parse(oldWorldInfoRaw);
       if (oldEntries && oldEntries.length > 0) {
-        loadedWorldBooks = { '默认世界书': { name: '默认世界书', entries: oldEntries } };
+        loadedWorldBooks = { '默认世界书': { name: '默认世界书', entries: sanitizeWorldBookEntries(oldEntries) } };
         loadedActiveWorldBook = '默认世界书';
       }
     } catch (e) {
@@ -603,7 +657,16 @@ const createStore = () => {
 
     importWorldBook: (name: string, entries: WorldInfoEntry[]) => {
       if (!name.trim()) return;
-      state.worldBooks = { ...state.worldBooks, [name.trim()]: { name: name.trim(), entries } };
+      // 清洗所有条目数据，确保 content/comment/name 等字段为有效字符串
+      const sanitizedEntries = entries.map(e => ({
+        ...e,
+        content: sanitizeEntryField(e.content),
+        comment: sanitizeEntryField(e.comment),
+        name: sanitizeEntryField(e.name),
+        keys: Array.isArray(e.keys) ? e.keys.filter(k => typeof k === 'string') : [],
+        secondaryKeys: Array.isArray(e.secondaryKeys) ? e.secondaryKeys.filter(k => typeof k === 'string') : [],
+      }));
+      state.worldBooks = { ...state.worldBooks, [name.trim()]: { name: name.trim(), entries: sanitizedEntries } };
       state.activeWorldBook = name.trim();
       notify();
     },
@@ -614,6 +677,11 @@ const createStore = () => {
       if (!wb) return 0;
       const newEntry: WorldInfoEntry = {
         ...entry,
+        content: sanitizeEntryField(entry.content),
+        comment: sanitizeEntryField(entry.comment),
+        name: sanitizeEntryField(entry.name),
+        keys: Array.isArray(entry.keys) ? entry.keys.filter((k): k is string => typeof k === 'string') : [],
+        secondaryKeys: Array.isArray(entry.secondaryKeys) ? entry.secondaryKeys.filter((k): k is string => typeof k === 'string') : [],
         id: Date.now(),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -628,8 +696,15 @@ const createStore = () => {
       if (!wb) return;
       const idx = wb.entries.findIndex((e) => e.id === entryId);
       if (idx !== -1) {
+        // 清洗更新数据中的字符串字段
+        const sanitizedUpdates: Partial<WorldInfoEntry> = { ...updates };
+        if ('content' in sanitizedUpdates) sanitizedUpdates.content = sanitizeEntryField(sanitizedUpdates.content);
+        if ('comment' in sanitizedUpdates) sanitizedUpdates.comment = sanitizeEntryField(sanitizedUpdates.comment);
+        if ('name' in sanitizedUpdates) sanitizedUpdates.name = sanitizeEntryField(sanitizedUpdates.name);
+        if ('keys' in sanitizedUpdates) sanitizedUpdates.keys = Array.isArray(sanitizedUpdates.keys) ? sanitizedUpdates.keys.filter((k): k is string => typeof k === 'string') : [];
+        if ('secondaryKeys' in sanitizedUpdates) sanitizedUpdates.secondaryKeys = Array.isArray(sanitizedUpdates.secondaryKeys) ? sanitizedUpdates.secondaryKeys.filter((k): k is string => typeof k === 'string') : [];
         wb.entries = wb.entries.map((e, i) =>
-          i === idx ? { ...e, ...updates, updatedAt: new Date().toISOString() } : e
+          i === idx ? { ...e, ...sanitizedUpdates, updatedAt: new Date().toISOString() } : e
         );
         notify();
       }

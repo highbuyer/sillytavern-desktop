@@ -59,12 +59,12 @@ function normalizePosition(pos: any): WIPosition {
 function getSafeEntry(entry: any): WorldInfoEntry {
   return {
     id: entry.id ?? 0,
-    keys: Array.isArray(entry.keys) ? entry.keys : [],
-    secondaryKeys: Array.isArray(entry.secondaryKeys) ? entry.secondaryKeys : [],
+    keys: Array.isArray(entry.keys) ? entry.keys.filter((k): k is string => typeof k === 'string') : [],
+    secondaryKeys: Array.isArray(entry.secondaryKeys) ? entry.secondaryKeys.filter((k): k is string => typeof k === 'string') : [],
     selectiveLogic: entry.selectiveLogic === 'AND' ? 'AND' : 'OR',
     content: safeContent(entry.content),
-    comment: entry.comment || '',
-    name: entry.name || '',
+    comment: safeContent(entry.comment),
+    name: safeContent(entry.name),
     enabled: entry.enabled !== false,
     constant: entry.constant || false,
     position: normalizePosition(entry.position),
@@ -92,8 +92,26 @@ function getSafeEntry(entry: any): WorldInfoEntry {
 /** 安全获取条目内容，确保始终为有效字符串 */
 function safeContent(content: any): string {
   if (content == null || content === undefined) return '';
-  const str = typeof content === 'string' ? content : String(content);
-  // 过滤掉明显的无效内容
+  if (typeof content === 'string') {
+    // 过滤掉明显的无效内容
+    if (content === 'undefined' || content === 'null' || content === '[object Object]' || content === '[object Array]') return '';
+    return content.trim();
+  }
+  if (Array.isArray(content)) {
+    // 数组：将每个元素递归转为字符串后用换行连接
+    return content.map(v => safeContent(v)).filter(Boolean).join('\n');
+  }
+  if (typeof content === 'object') {
+    // 对象：尝试 JSON 序列化
+    try {
+      const json = JSON.stringify(content);
+      if (json === '{}' || json === '[]') return '';
+      return json;
+    } catch {
+      return '';
+    }
+  }
+  const str = String(content);
   if (str === 'undefined' || str === 'null' || str === '[object Object]' || str === '[object Array]') return '';
   return str.trim();
 }

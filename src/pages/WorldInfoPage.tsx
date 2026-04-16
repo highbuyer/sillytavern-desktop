@@ -36,6 +36,34 @@ const positionShortLabels: Record<WIPosition, string> = {
 
 type SortMode = 'order' | 'name' | 'updated';
 
+/**
+ * 安全地将任意值转换为字符串
+ * 处理 null、undefined、对象、数组等非字符串类型
+ */
+function safeString(val: any): string {
+  if (val == null) return '';
+  if (typeof val === 'string') {
+    if (val === 'undefined' || val === 'null' || val === '[object Object]' || val === '[object Array]') return '';
+    return val.trim();
+  }
+  if (Array.isArray(val)) {
+    const parts = val.map(v => safeString(v)).filter(Boolean);
+    return parts.join('\n');
+  }
+  if (typeof val === 'object') {
+    try {
+      const json = JSON.stringify(val);
+      if (json === '{}' || json === '[]') return '';
+      return json;
+    } catch {
+      return '';
+    }
+  }
+  const str = String(val);
+  if (str === 'undefined' || str === 'null' || str === '[object Object]' || str === '[object Array]') return '';
+  return str.trim();
+}
+
 /* ─── Toggle Switch ─── */
 const ToggleSwitch: React.FC<{
   checked: boolean;
@@ -546,9 +574,9 @@ const WorldInfoPage: React.FC = () => {
       const q = searchQuery.toLowerCase();
       entries = entries.filter(entry =>
         entry.keys.some(k => k.toLowerCase().includes(q)) ||
-        entry.content.toLowerCase().includes(q) ||
-        entry.comment.toLowerCase().includes(q) ||
-        entry.name.toLowerCase().includes(q)
+        (entry.content || '').toLowerCase().includes(q) ||
+        (entry.comment || '').toLowerCase().includes(q) ||
+        (entry.name || '').toLowerCase().includes(q)
       );
     }
     switch (sortMode) {
@@ -626,7 +654,7 @@ const WorldInfoPage: React.FC = () => {
         uid: entry.id, displayIndex: entry.order, name: entry.name || '', comment: entry.comment || '',
         keys: entry.keys, keysecondary: entry.secondaryKeys || [],
         selectiveLogic: entry.selectiveLogic === 'AND' ? 1 : 0,
-        content: entry.content, constant: entry.constant,
+        content: entry.content || '', constant: entry.constant,
         selective: (entry.secondaryKeys || []).length > 0, disable: !entry.enabled,
         position: mapPositionToST(entry.position), depth: entry.depth || entry.scanDepth || 4,
         order: entry.order, caseSensitive: entry.caseSensitive || null, scanDepth: entry.scanDepth || null,
@@ -720,9 +748,9 @@ const WorldInfoPage: React.FC = () => {
               keys: keyArray,
               secondaryKeys: secondaryKeyArray,
               selectiveLogic: entry.selectiveLogic === 1 || entry.selectiveLogic === 'AND' ? 'AND' : 'OR',
-              content: entry.content || '',
-              comment: entry.comment || '',
-              name: entry.name || entry.comment || '',
+              content: safeString(entry.content),
+              comment: safeString(entry.comment),
+              name: safeString(entry.name) || safeString(entry.comment),
               enabled: entry.disable === true ? false : (entry.enabled !== false),
               constant: entry.constant || false,
               position: mapPosition(entry.position),
