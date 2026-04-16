@@ -79,17 +79,21 @@ export interface ParsedCharacterCard {
   personality: string;
   scenario: string;
   first_mes: string;
+  mes_example: string;
   system_prompt: string;
+  post_history_instructions: string;
   creator_notes: string;
   tags: string[];
   creator: string;
   character_version: string;
+  alternate_greetings: string[];
   avatar: string;
   temperature?: number;
   maxTokens?: number;
   topP?: number;
   frequencyPenalty?: number;
   presencePenalty?: number;
+  talkativeness?: number;
   /** 角色卡中嵌入的世界书数据（V2/V3 规范） */
   character_book?: any;
 }
@@ -207,13 +211,17 @@ function normalizeCharacterCard(json: any): ParsedCharacterCard | null {
       personality: data.personality || '',
       scenario: data.scenario || '',
       first_mes: data.first_mes || '',
+      mes_example: data.mes_example || '',
       system_prompt: data.system_prompt || '',
+      post_history_instructions: data.post_history_instructions || '',
       creator_notes: data.creator_notes || json.creatorcomment || '',
       tags: data.tags || json.tags || [],
       creator: data.creator || '',
       character_version: data.character_version || '',
+      alternate_greetings: data.alternate_greetings || [],
       avatar: data.avatar || json.avatar || '',
       temperature: data.extensions?.depth_prompt?.prompt ? undefined : undefined,
+      talkativeness: data.extensions?.talkativeness ?? 50,
       character_book: data.character_book || json.character_book || undefined,
     };
   }
@@ -227,17 +235,21 @@ function normalizeCharacterCard(json: any): ParsedCharacterCard | null {
       personality: data.personality || '',
       scenario: data.scenario || '',
       first_mes: data.first_mes || '',
+      mes_example: data.mes_example || '',
       system_prompt: data.system_prompt || '',
+      post_history_instructions: data.post_history_instructions || '',
       creator_notes: data.creator_notes || '',
       tags: data.tags || [],
       creator: data.creator || '',
       character_version: data.character_version || '',
+      alternate_greetings: data.alternate_greetings || [],
       avatar: data.avatar || '',
       temperature: data.temperature,
       maxTokens: data.maxTokens,
       topP: data.topP,
       frequencyPenalty: data.frequencyPenalty,
       presencePenalty: data.presencePenalty,
+      talkativeness: data.extensions?.talkativeness ?? 50,
       character_book: data.character_book || data.extensions?.character_book || undefined,
     };
   }
@@ -250,11 +262,14 @@ function normalizeCharacterCard(json: any): ParsedCharacterCard | null {
       personality: json.personality || '',
       scenario: json.scenario || '',
       first_mes: json.first_mes || '',
+      mes_example: json.mes_example || '',
       system_prompt: json.system_prompt || json.prompt || '',
+      post_history_instructions: json.post_history_instructions || '',
       creator_notes: json.creator_notes || json.creatorcomment || '',
       tags: json.tags || [],
       creator: json.creator || '',
       character_version: json.character_version || '',
+      alternate_greetings: json.alternate_greetings || [],
       avatar: json.avatar || '',
       character_book: json.character_book || undefined,
     };
@@ -272,18 +287,20 @@ export function roleToTavernCard(role: Role): TavernAIV2Card {
     data: {
       name: role.name,
       description: role.description || '',
-      personality: '',
-      scenario: '',
-      first_mes: '',
-      mes_example: '',
-      creator_notes: '',
-      system_prompt: role.prompt,
-      post_history_instructions: '',
-      alternate_greetings: [],
-      tags: [],
-      creator: 'SillyTavern Desktop',
-      character_version: '1.0',
-      extensions: {},
+      personality: role.personality || '',
+      scenario: role.scenario || '',
+      first_mes: role.first_mes || '',
+      mes_example: role.mes_example || '',
+      creator_notes: role.creator_notes || '',
+      system_prompt: role.system_prompt || role.prompt || '',
+      post_history_instructions: role.post_history_instructions || '',
+      alternate_greetings: role.alternate_greetings || [],
+      tags: role.tags || [],
+      creator: role.creator || 'SillyTavern Desktop',
+      character_version: role.character_version || '1.0',
+      extensions: {
+        ...(role.talkativeness !== undefined ? { talkativeness: role.talkativeness } : {}),
+      },
       avatar: role.avatar,
       temperature: role.temperature,
       maxTokens: role.maxTokens,
@@ -297,9 +314,22 @@ export function roleToTavernCard(role: Role): TavernAIV2Card {
 export function parsedCardToRole(card: ParsedCharacterCard): Omit<Role, 'id' | 'createdAt'> {
   return {
     name: card.name,
-    description: card.description || card.personality || '',
+    description: card.description || '',
     avatar: card.avatar || generateDefaultAvatar(card.name),
-    prompt: card.system_prompt || card.first_mes || card.description || '',
+    prompt: card.system_prompt || '',
+    personality: card.personality || '',
+    scenario: card.scenario || '',
+    first_mes: card.first_mes || '',
+    mes_example: card.mes_example || '',
+    alternate_greetings: card.alternate_greetings || [],
+    system_prompt: card.system_prompt || '',
+    post_history_instructions: card.post_history_instructions || '',
+    creator_notes: card.creator_notes || '',
+    creator: card.creator || '',
+    character_version: card.character_version || '',
+    tags: card.tags || [],
+    talkativeness: card.talkativeness ?? 50,
+    fav: false,
     temperature: card.temperature ?? 0.7,
     maxTokens: card.maxTokens ?? 2000,
     topP: card.topP ?? 0.9,

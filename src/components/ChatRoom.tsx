@@ -228,21 +228,41 @@ const ChatRoom: React.FC = () => {
     return config;
   }, [settings, role]);
 
-  // 构建消息列表（含作者注释注入）
+  // 构建消息列表（含角色卡字段和作者注释注入）
   const buildMessages = useCallback((chatMsgs: typeof chat.msgs): ChatMessage[] => {
     const messages: ChatMessage[] = [];
-    if (role?.prompt) {
-      messages.push({ role: 'system', content: role.prompt });
+
+    // ── 构建系统提示词：使用角色专属 system_prompt 或全局 prompt ──
+    let systemPrompt = role?.system_prompt || role?.prompt || '';
+    if (systemPrompt) {
+      // 替换 {{original}} 占位符（如果有全局 prompt）
+      if (systemPrompt.includes('{{original}}') && role?.prompt) {
+        systemPrompt = systemPrompt.replace(/\{\{original\}\}/g, role.prompt);
+      }
+      // 组装角色描述信息
+      const charParts: string[] = [];
+      if (role?.description) charParts.push(`[角色描述]: ${role.description}`);
+      if (role?.personality) charParts.push(`[性格]: ${role.personality}`);
+      if (role?.scenario) charParts.push(`[场景]: ${role.scenario}`);
+      if (role?.mes_example) charParts.push(`[示例对话]:\n${role.mes_example}`);
+      const charInfo = charParts.length > 0 ? charParts.join('\n\n') + '\n\n' : '';
+      messages.push({ role: 'system', content: charInfo + systemPrompt });
     }
+
     const recentMsgs = chatMsgs.slice(-50);
     for (const msg of recentMsgs) {
-      // 防御性处理：确保 content 始终为有效字符串
       const safeContent = typeof msg.content === 'string' ? msg.content : '';
-      if (!safeContent) continue; // 跳过空内容消息，避免 undefined/null 注入 prompt
+      if (!safeContent) continue;
       messages.push({
         role: msg.isUser ? 'user' : 'assistant',
         content: safeContent,
       });
+    }
+
+    // ── 注入后历史指令（post_history_instructions） ──
+    const phi = role?.post_history_instructions?.trim();
+    if (phi) {
+      messages.push({ role: 'system', content: phi });
     }
 
     // ── 注入作者注释 ──
@@ -250,7 +270,6 @@ const ChatRoom: React.FC = () => {
     if (authorsNote) {
       const position = settings.generation.authorsNotePosition || 'before_last';
       const noteMsg: ChatMessage = { role: 'system', content: `[作者注释]: ${authorsNote}` };
-      // 找到最后一条非 system 消息的索引
       const lastNonSystemIdx = messages.map((m, i) => (m.role !== 'system' ? i : -1)).filter(i => i >= 0).pop();
       if (lastNonSystemIdx !== undefined) {
         if (position === 'before_last') {

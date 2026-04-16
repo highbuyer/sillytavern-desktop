@@ -25,15 +25,32 @@ export type Chat = {
 export type Role = {
   id: number;
   name: string;
-  description: string;
+  description: string;          // 角色描述（外观、性格、背景等）
   avatar: string;
-  prompt: string;
+  prompt: string;               // 系统提示词
+  // ── 生成参数 ──
   temperature?: number;
   maxTokens?: number;
   topP?: number;
   frequencyPenalty?: number;
   presencePenalty?: number;
+  // ── TavernAI V2/V3 扩展字段 ──
+  personality?: string;         // 性格概述
+  scenario?: string;            // 对话场景/情境
+  first_mes?: string;           // 首条问候语
+  mes_example?: string;         // 示例对话（<START> 分隔）
+  alternate_greetings?: string[]; // 备选问候语
+  system_prompt?: string;       // 角色专属系统提示词（覆盖全局）
+  post_history_instructions?: string; // 角色专属后历史指令
+  creator_notes?: string;       // 创作者注释（不注入 prompt）
+  creator?: string;             // 创作者
+  character_version?: string;   // 角色版本
+  tags?: string[];              // 标签（用于筛选/排序）
+  talkativeness?: number;       // 群聊活跃度 0-100
+  fav?: boolean;                // 收藏/星标
+  // ── 时间戳 ──
   createdAt: string;
+  updatedAt?: string;
 };
 
 export type AIProvider = 'openai' | 'claude' | 'ollama' | 'openrouter';
@@ -577,6 +594,30 @@ const createStore = () => {
       state.roles = state.roles.filter((r) => r.id !== roleId);
       notify();
     },
+
+    duplicateRole: (roleId: number) => {
+      const role = state.roles.find((r) => r.id === roleId);
+      if (!role) return;
+      const newRole: Role = {
+        ...JSON.parse(JSON.stringify(role)),
+        id: Date.now(),
+        name: role.name + ' (副本)',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      state.roles.push(newRole);
+      notify();
+      return newRole.id;
+    },
+
+    toggleRoleFav: (roleId: number) => {
+      const role = state.roles.find((r) => r.id === roleId);
+      if (role) {
+        role.fav = !role.fav;
+        role.updatedAt = new Date().toISOString();
+        notify();
+      }
+    },
     
     // Settings operations
     updateSettings: (updates: Partial<Settings>) => {
@@ -793,7 +834,7 @@ const createStore = () => {
 const store = createStore();
 export const {
   subscribe, getState, addChat, updateChat, deleteChat, addMessage, updateMessage, deleteMessage, markRead,
-  addRole, updateRole, deleteRole, updateSettings, resetSettings, exportData, importData,
+  addRole, updateRole, deleteRole, duplicateRole, toggleRoleFav, updateSettings, resetSettings, exportData, importData,
   getActiveWorldInfo, createWorldBook, deleteWorldBook, renameWorldBook, duplicateWorldBook,
   setActiveWorldBook, getWorldBookNames, importWorldBook,
   addWorldInfoEntry, updateWorldInfoEntry, deleteWorldInfoEntry, reorderWorldInfo, updateWorldInfoSettings,
