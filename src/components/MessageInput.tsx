@@ -24,7 +24,7 @@ const MessageInput: React.FC<Props> = ({ value, onChange, onSend, disabled = fal
         disabled={disabled}
         rows={1}
       />
-      <button onClick={onSend} disabled={disabled || !value.trim()}>
+      <button className="btn-send" onClick={onSend} disabled={disabled || !value.trim()}>
         {disabled ? '生成中...' : '发送'}
       </button>
     </div>

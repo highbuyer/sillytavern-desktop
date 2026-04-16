@@ -6,7 +6,7 @@ import { estimateTokens, estimateMessagesTokens, formatTokenCount, getContextUsa
 import { scanWorldInfo, injectWorldInfo, ScanContext, ScanResult } from '../services/worldInfo';
 import { useHotkeys } from '../hooks/useHotkeys';
 import MessageBubble from './MessageBubble';
-import MessageInput from './MessageInput';
+
 import RoleSelector from './RoleSelector';
 
 const ChatRoom: React.FC = () => {
@@ -777,96 +777,7 @@ const ChatRoom: React.FC = () => {
             onRoleChange={handleRoleChange}
           />
 
-          {/* ── 聊天选项菜单 ── */}
-          <div className="chat-options-menu" ref={optionsMenuRef}>
-            <button
-              className="btn-icon"
-              onClick={() => setShowOptions(prev => !prev)}
-              title="聊天选项"
-              style={{ fontSize: '20px', lineHeight: 1 }}
-            >
-              ⋮
-            </button>
-            {showOptions && (
-              <div className="chat-options-panel">
-                <button onClick={handleNewChat}>
-                  <span>✏️</span> 开始新聊天
-                </button>
-                <button onClick={() => { setShowCfgScale(prev => !prev); setShowOptions(false); }}>
-                  <span>🎛️</span> {showCfgScale ? '隐藏 CFG 缩放' : 'CFG 缩放'}
-                </button>
-                <button onClick={() => { setShowAuthorsNote(prev => !prev); setShowOptions(false); }}>
-                  <span>📝</span> {showAuthorsNote ? '隐藏作者注释' : '作者注释'}
-                </button>
-                <button onClick={handleToggleLogprobs}>
-                  <span>📊</span> {settings.generation.showLogprobs ? '隐藏 Token 概率' : 'Token 概率'}
-                </button>
-                <button onClick={handleMenuRegenerate} disabled={generating || chat.msgs.filter(m => !m.isUser).length === 0}>
-                  <span>🔄</span> 重新生成
-                </button>
-                <button onClick={handleContinue} disabled={generating || chat.msgs.filter(m => !m.isUser && m.content.trim()).length === 0}>
-                  <span>➡️</span> 续写
-                </button>
-                <button onClick={handleImpersonate} disabled={generating}>
-                  <span>🎭</span> AI 帮答
-                </button>
-                <hr />
-                <button
-                  className="checkpoint-save-btn"
-                  onClick={() => { setShowCheckpointInput(true); setShowOptions(false); }}
-                >
-                  <span>💾</span> 保存检查点
-                </button>
-                <div className="checkpoint-load-wrapper">
-                  <button
-                    className="checkpoint-load-btn"
-                    onClick={() => setShowCheckpointMenu(prev => !prev)}
-                    disabled={checkpoints.length === 0}
-                  >
-                    <span>📂</span> 加载检查点 {checkpoints.length > 0 && `(${checkpoints.length})`}
-                  </button>
-                  {showCheckpointMenu && checkpoints.length > 0 && (
-                    <div className="checkpoint-submenu">
-                      {checkpoints.map(cp => (
-                        <div key={cp.key} className="checkpoint-item">
-                          <span
-                            className="checkpoint-item-name"
-                            onClick={() => handleLoadCheckpoint(cp.key)}
-                            title={cp.name}
-                          >
-                            {cp.name}
-                            <span className="checkpoint-item-time">
-                              {new Date(cp.timestamp).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric' })}
-                            </span>
-                          </span>
-                          <button
-                            className="btn-icon checkpoint-delete-btn"
-                            onClick={() => handleDeleteCheckpoint(cp.key)}
-                            title="删除"
-                          >✕</button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <hr />
-                <button onClick={handleEnterMultiSelect}>
-                  <span>🗑️</span> 删除消息
-                </button>
-                <hr />
-                <button onClick={() => handleComingSoon('返回到父级聊天')} disabled>
-                  <span>⬆️</span> 返回到父级聊天 <span className="coming-soon-tag">(即将推出)</span>
-                </button>
-                <button onClick={() => handleComingSoon('转换为群聊')} disabled>
-                  <span>👥</span> 转换为群聊 <span className="coming-soon-tag">(即将推出)</span>
-                </button>
-                <hr />
-                <button onClick={handleCloseChat}>
-                  <span>❌</span> 关闭聊天
-                </button>
-              </div>
-            )}
-          </div>
+
 
           <button className="btn-icon" onClick={() => navigate(`/chat/${id}/settings`)}>
             设置
@@ -1064,6 +975,7 @@ const ChatRoom: React.FC = () => {
         </div>
       )}
 
+      {/* ── 输入栏（仿 SillyTavern 原项目 #send_form 布局） ── */}
       <div className="input-area">
         {/* AI 帮答提示 */}
         {impersonateMode && (
@@ -1072,23 +984,141 @@ const ChatRoom: React.FC = () => {
             <button className="btn-sm btn-secondary" onClick={() => setImpersonateMode(false)}>取消</button>
           </div>
         )}
-        {generating && !impersonateMode && (
-          <button className="btn-stop" onClick={handleStop}>
-            停止生成
-          </button>
-        )}
-        {generating && impersonateMode && (
-          <button className="btn-stop" onClick={handleStop}>
-            停止生成
-          </button>
-        )}
-        <MessageInput
-          value={input}
-          onChange={setInput}
-          onSend={handleSend}
-          disabled={generating}
-          placeholder={impersonateMode ? '输入指令，让 AI 代替你写消息...' : `发送消息给 ${role?.name || 'AI助手'}...`}
-        />
+        <div className="send-form">
+          {/* 左侧：选项按钮 */}
+          <div className="left-send-form">
+            <div className="chat-options-menu" ref={optionsMenuRef}>
+              <button
+                className="send-form-btn"
+                onClick={() => setShowOptions(prev => !prev)}
+                title="聊天选项"
+              >
+                ☰
+              </button>
+              {showOptions && (
+                <div className="chat-options-panel">
+                  <button onClick={handleNewChat}>
+                    <span>✏️</span> 开始新聊天
+                  </button>
+                  <button onClick={() => { setShowCfgScale(prev => !prev); setShowOptions(false); }}>
+                    <span>🎛️</span> {showCfgScale ? '隐藏 CFG 缩放' : 'CFG 缩放'}
+                  </button>
+                  <button onClick={() => { setShowAuthorsNote(prev => !prev); setShowOptions(false); }}>
+                    <span>📝</span> {showAuthorsNote ? '隐藏作者注释' : '作者注释'}
+                  </button>
+                  <button onClick={handleToggleLogprobs}>
+                    <span>📊</span> {settings.generation.showLogprobs ? '隐藏 Token 概率' : 'Token 概率'}
+                  </button>
+                  <hr />
+                  <button
+                    className="checkpoint-save-btn"
+                    onClick={() => { setShowCheckpointInput(true); setShowOptions(false); }}
+                  >
+                    <span>💾</span> 保存检查点
+                  </button>
+                  <div className="checkpoint-load-wrapper">
+                    <button
+                      className="checkpoint-load-btn"
+                      onClick={() => setShowCheckpointMenu(prev => !prev)}
+                      disabled={checkpoints.length === 0}
+                    >
+                      <span>📂</span> 加载检查点 {checkpoints.length > 0 && `(${checkpoints.length})`}
+                    </button>
+                    {showCheckpointMenu && checkpoints.length > 0 && (
+                      <div className="checkpoint-submenu">
+                        {checkpoints.map(cp => (
+                          <div key={cp.key} className="checkpoint-item">
+                            <span
+                              className="checkpoint-item-name"
+                              onClick={() => handleLoadCheckpoint(cp.key)}
+                              title={cp.name}
+                            >
+                              {cp.name}
+                              <span className="checkpoint-item-time">
+                                {new Date(cp.timestamp).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric' })}
+                              </span>
+                            </span>
+                            <button
+                              className="btn-icon checkpoint-delete-btn"
+                              onClick={() => handleDeleteCheckpoint(cp.key)}
+                              title="删除"
+                            >✕</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <hr />
+                  <button onClick={handleEnterMultiSelect}>
+                    <span>🗑️</span> 删除消息
+                  </button>
+                  <hr />
+                  <button onClick={() => handleComingSoon('返回到父级聊天')} disabled>
+                    <span>⬆️</span> 返回到父级聊天 <span className="coming-soon-tag">(即将推出)</span>
+                  </button>
+                  <button onClick={() => handleComingSoon('转换为群聊')} disabled>
+                    <span>👥</span> 转换为群聊 <span className="coming-soon-tag">(即将推出)</span>
+                  </button>
+                  <hr />
+                  <button onClick={handleCloseChat}>
+                    <span>❌</span> 关闭聊天
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 中间：输入框 */}
+          <textarea
+            className="send-textarea"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && !generating) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+            placeholder={impersonateMode ? '输入指令，让 AI 代替你写消息...' : `发送消息给 ${role?.name || 'AI助手'}...`}
+            disabled={generating}
+            rows={1}
+            ref={inputRef}
+          />
+
+          {/* 右侧：操作按钮 */}
+          <div className="right-send-form">
+            <button
+              className={`send-form-btn ${impersonateMode ? 'active' : ''}`}
+              onClick={handleImpersonate}
+              disabled={generating}
+              title="AI 帮答"
+            >
+              👤
+            </button>
+            <button
+              className="send-form-btn"
+              onClick={handleContinue}
+              disabled={generating || chat.msgs.filter(m => !m.isUser && m.content.trim()).length === 0}
+              title="续写"
+            >
+              ➤
+            </button>
+            {generating ? (
+              <button className="send-form-btn btn-stop-inline" onClick={handleStop} title="停止生成">
+                ⏹
+              </button>
+            ) : (
+              <button
+                className="send-form-btn btn-send-inline"
+                onClick={handleSend}
+                disabled={!input.trim()}
+                title="发送"
+              >
+                ✈️
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* ── 多选操作栏 ── */}
