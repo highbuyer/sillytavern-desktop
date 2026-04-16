@@ -181,7 +181,16 @@ const ChatRoom: React.FC = () => {
     // 更新激活条目状态供 UI 显示
     setActiveEntries(scanResult.matched);
     setActiveTokenCount(scanResult.totalTokens);
-    return injectWorldInfo(scanResult, baseMessages, ctx.role);
+
+    // 替换 SillyTavern 宏 ({{char}}, {{user}} 等) 为实际值
+    const enhanced = injectWorldInfo(scanResult, baseMessages, ctx.role);
+    const charName = role?.name || '角色';
+    return enhanced.map(msg => ({
+      ...msg,
+      content: msg.content
+        .replace(/\{\{char\}\}/gi, charName)
+        .replace(/\{\{Char\}\}/g, charName),
+    }));
   }, [buildMessages, worldInfo, worldInfoSettings, role]);
 
   // 流式生成通用逻辑

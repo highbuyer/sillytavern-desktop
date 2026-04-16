@@ -62,7 +62,7 @@ function getSafeEntry(entry: any): WorldInfoEntry {
     keys: Array.isArray(entry.keys) ? entry.keys : [],
     secondaryKeys: Array.isArray(entry.secondaryKeys) ? entry.secondaryKeys : [],
     selectiveLogic: entry.selectiveLogic === 'AND' ? 'AND' : 'OR',
-    content: entry.content || '',
+    content: safeContent(entry.content),
     comment: entry.comment || '',
     name: entry.name || '',
     enabled: entry.enabled !== false,
@@ -87,6 +87,15 @@ function getSafeEntry(entry: any): WorldInfoEntry {
     createdAt: entry.createdAt || new Date().toISOString(),
     updatedAt: entry.updatedAt || new Date().toISOString(),
   };
+}
+
+/** 安全获取条目内容，确保始终为有效字符串 */
+function safeContent(content: any): string {
+  if (content == null || content === undefined) return '';
+  const str = typeof content === 'string' ? content : String(content);
+  // 过滤掉明显的无效内容
+  if (str === 'undefined' || str === 'null' || str === '[object Object]' || str === '[object Array]') return '';
+  return str.trim();
 }
 
 /** 检查关键词是否在文本中匹配 */
@@ -310,7 +319,7 @@ export function injectWorldInfo(
     if (!posEntries || posEntries.length === 0) continue;
 
     const content = posEntries
-      .map(e => e.content)
+      .map(e => safeContent(e.content))
       .filter(Boolean)
       .join('\n\n');
 
