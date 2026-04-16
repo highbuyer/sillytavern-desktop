@@ -3046,3 +3046,291 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ==================== Toast 通知 ==================== */
+.toast-notification {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 20px;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  z-index: 2000;
+  animation: toast-in 0.3s ease-out, toast-out 0.3s ease-in 2.7s forwards;
+  pointer-events: none;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes toast-out {
+  from { opacity: 1; transform: translateX(-50%) translateY(0); }
+  to { opacity: 0; transform: translateX(-50%) translateY(10px); }
+}
+
+/* ==================== CFG 缩放面板 ==================== */
+.cfg-scale-panel {
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--border);
+  animation: slideIn 0.2s ease-out;
+}
+
+.cfg-scale-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.cfg-scale-header label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.cfg-scale-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  background: rgba(91, 63, 217, 0.15);
+  padding: 2px 10px;
+  border-radius: 4px;
+}
+
+.cfg-scale-panel input[type="range"] {
+  width: 100%;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: linear-gradient(to right, var(--accent), #FF9800);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.cfg-scale-panel input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  box-shadow: 0 0 4px rgba(91, 63, 217, 0.5);
+}
+
+.cfg-scale-hint {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+/* ==================== Token 概率面板 ==================== */
+.logprobs-panel {
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  animation: slideIn 0.2s ease-out;
+  max-height: 200px;
+  overflow: hidden;
+}
+
+.logprobs-panel.logprobs-empty {
+  max-height: none;
+}
+
+.logprobs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  transition: background 0.2s;
+}
+
+.logprobs-header:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.logprobs-close {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.logprobs-content {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+  padding: 4px 16px 8px 16px;
+  overflow-y: auto;
+  max-height: 140px;
+}
+
+.logprob-token {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  transition: background 0.15s;
+  cursor: default;
+}
+
+.logprob-token:hover {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.logprob-token-text {
+  white-space: nowrap;
+}
+
+.logprob-token-pct {
+  font-size: 9px;
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+.logprobs-legend {
+  display: flex;
+  gap: 16px;
+  padding: 4px 16px 6px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 10px;
+}
+
+.logprobs-empty-msg {
+  padding: 8px 16px 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+/* ==================== 检查点输入区域 ==================== */
+.checkpoint-input-area {
+  padding: 10px 16px;
+  background: rgba(91, 63, 217, 0.08);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  animation: slideIn 0.2s ease-out;
+}
+
+.checkpoint-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.checkpoint-name-input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  font-family: inherit;
+}
+
+.checkpoint-name-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(91, 63, 217, 0.3);
+}
+
+/* ==================== 检查点子菜单 ==================== */
+.checkpoint-load-wrapper {
+  position: relative;
+}
+
+.checkpoint-submenu {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+  min-width: 200px;
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 200;
+}
+
+.checkpoint-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  gap: 8px;
+  transition: background 0.15s;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.checkpoint-item:last-child {
+  border-bottom: none;
+}
+
+.checkpoint-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.checkpoint-item-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+}
+
+.checkpoint-item-name:hover {
+  color: var(--accent);
+}
+
+.checkpoint-item-time {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.checkpoint-delete-btn {
+  color: var(--text-dim) !important;
+  font-size: 12px !important;
+  padding: 2px 4px !important;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.checkpoint-delete-btn:hover {
+  color: var(--danger) !important;
+  background: rgba(244, 67, 54, 0.15);
+}
+
+/* ==================== 聊天选项 - 即将推出标签 ==================== */
+.coming-soon-tag {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-weight: normal;
+  font-style: italic;
+}
+
+.chat-options-panel button:disabled .coming-soon-tag {
+  color: var(--text-dim);
+}

@@ -164,6 +164,8 @@ export type Settings = {
     presencePenalty: number;
     authorsNote: string;
     authorsNotePosition: 'before_last' | 'after_last';
+    cfgScale: number;
+    showLogprobs: boolean;
   };
   ui: {
     theme: 'dark' | 'light' | 'auto';
@@ -219,6 +221,8 @@ const defaultSettings: Settings = {
     presencePenalty: 0.0,
     authorsNote: '',
     authorsNotePosition: 'before_last' as const,
+    cfgScale: 1,
+    showLogprobs: false,
   },
   ui: {
     theme: 'dark',

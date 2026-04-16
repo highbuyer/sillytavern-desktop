@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStoreState, addChat, addMessage, updateChat, updateMessage, deleteMessage, updateSettings, getState, WorldInfoSettings, WorldInfoEntry } from '../store/useStore';
-import { streamChat, abortGeneration, MODEL_LIST, AIServiceConfig, ChatMessage } from '../services/ai';
+import { streamChat, abortGeneration, MODEL_LIST, AIServiceConfig, ChatMessage, LogprobData } from '../services/ai';
 import { estimateTokens, estimateMessagesTokens, formatTokenCount, getContextUsage } from '../services/tokenCounter';
 import { scanWorldInfo, injectWorldInfo, ScanContext, ScanResult } from '../services/worldInfo';
 import { useHotkeys } from '../hooks/useHotkeys';
@@ -35,6 +35,24 @@ const ChatRoom: React.FC = () => {
 
   // ── AI 帮答状态 ──
   const [impersonateMode, setImpersonateMode] = useState(false);
+
+  // ── CFG 缩放状态 ──
+  const [showCfgScale, setShowCfgScale] = useState(false);
+
+  // ── Token 概率状态 ──
+  const [showLogprobsPanel, setShowLogprobsPanel] = useState(false);
+  const [logprobData, setLogprobData] = useState<LogprobData[]>([]);
+  const logprobDataRef = useRef<LogprobData[]>([]);
+
+  // ── Toast 状态 ──
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── 检查点状态 ──
+  const [checkpointName, setCheckpointName] = useState('');
+  const [showCheckpointInput, setShowCheckpointInput] = useState(false);
+  const [showCheckpointMenu, setShowCheckpointMenu] = useState(false);
+  const [checkpoints, setCheckpoints] = useState<{ key: string; name: string; timestamp: number }[]>([]);
 
   const { chats, roles, settings, worldBooks, activeWorldBook, worldInfoSettings } = useStoreState();
   const chat = chats.find(c => String(c.id) === String(id));
@@ -83,6 +101,38 @@ const ChatRoom: React.FC = () => {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [multiSelectMode]);
+
+  // ── Toast 自动消失 ──
+  useEffect(() => {
+    if (toast) {
+      toastTimerRef.current = setTimeout(() => setToast(null), 3000);
+      return () => {
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      };
+    }
+  }, [toast]);
+
+  // ── 加载检查点列表 ──
+  const loadCheckpoints = useCallback(() => {
+    if (!chat) return;
+    const cps: { key: string; name: string; timestamp: number }[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(`sillytavern-checkpoint-${chat.id}-`)) {
+        try {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const data = JSON.parse(raw);
+            cps.push({ key, name: data.name || key, timestamp: data.timestamp || 0 });
+          }
+        } catch { /* ignore */ }
+      }
+    }
+    cps.sort((a, b) => b.timestamp - a.timestamp);
+    setCheckpoints(cps);
+  }, [chat?.id]);
+
+  useEffect(() => { loadCheckpoints(); }, [loadCheckpoints]);
 
   // 自动更新 handleStop 引用
   const handleStopStable = useCallback(() => {
@@ -145,6 +195,8 @@ const ChatRoom: React.FC = () => {
       frequencyPenalty: role?.frequencyPenalty ?? settings.generation.frequencyPenalty,
       presencePenalty: role?.presencePenalty ?? settings.generation.presencePenalty,
       proxyUrl: api.proxyUrl,
+      cfgScale: settings.generation.cfgScale ?? 1,
+      enableLogprobs: settings.generation.showLogprobs ?? false,
     };
 
     switch (provider) {
@@ -267,6 +319,10 @@ const ChatRoom: React.FC = () => {
       return;
     }
 
+    // 重置 logprobs 收集
+    logprobDataRef.current = [];
+    setLogprobData([]);
+
     await streamChat(config, messages, {
       onToken: (token) => {
         if (abortRef.current) {
@@ -283,11 +339,16 @@ const ChatRoom: React.FC = () => {
         updateMessage(chatId, targetMsgId, fullText || '(已停止生成)');
         setGenerating(false);
         setStreamingMsgId(null);
+        // 保存收集到的 logprobs
+        setLogprobData([...logprobDataRef.current]);
       },
       onError: (error) => {
         updateMessage(chatId, targetMsgId, `错误: ${error.message}`);
         setGenerating(false);
         setStreamingMsgId(null);
+      },
+      onLogprob: (data) => {
+        logprobDataRef.current.push(data);
       },
     });
   }, [buildAIConfig]);
@@ -604,6 +665,96 @@ const ChatRoom: React.FC = () => {
     }
   };
 
+  // ── Toast 显示 ──
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+  }, []);
+
+  // ── CFG 缩放变更 ──
+  const handleCfgScaleChange = (value: number) => {
+    updateSettings({
+      generation: {
+        ...settings.generation,
+        cfgScale: value,
+      },
+    } as any);
+  };
+
+  // ── Token 概率切换 ──
+  const handleToggleLogprobs = () => {
+    const newVal = !settings.generation.showLogprobs;
+    updateSettings({
+      generation: {
+        ...settings.generation,
+        showLogprobs: newVal,
+      },
+    } as any);
+    if (newVal) {
+      setShowLogprobsPanel(true);
+    }
+    setShowOptions(false);
+  };
+
+  // ── 保存检查点 ──
+  const handleSaveCheckpoint = () => {
+    if (!chat) return;
+    const name = checkpointName.trim() || `检查点 ${new Date().toLocaleString('zh-CN')}`;
+    const key = `sillytavern-checkpoint-${chat.id}-${Date.now()}`;
+    try {
+      localStorage.setItem(key, JSON.stringify({
+        name,
+        timestamp: Date.now(),
+        chatId: chat.id,
+        messages: chat.msgs,
+      }));
+      setCheckpointName('');
+      setShowCheckpointInput(false);
+      setShowOptions(false);
+      loadCheckpoints();
+      showToast(`检查点 "${name}" 已保存`);
+    } catch (e: any) {
+      showToast(`保存失败: ${e.message}`);
+    }
+  };
+
+  // ── 加载检查点 ──
+  const handleLoadCheckpoint = (key: string) => {
+    if (!chat) return;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (data.messages && Array.isArray(data.messages)) {
+        updateChat(chat.id, { msgs: data.messages, lastMessage: data.messages[data.messages.length - 1]?.content?.substring(0, 100) || '' });
+        setShowCheckpointMenu(false);
+        setShowOptions(false);
+        setLogprobData([]);
+        logprobDataRef.current = [];
+        showToast(`检查点 "${data.name}" 已加载`);
+      }
+    } catch (e: any) {
+      showToast(`加载失败: ${e.message}`);
+    }
+  };
+
+  // ── 删除检查点 ──
+  const handleDeleteCheckpoint = (key: string) => {
+    try {
+      localStorage.removeItem(key);
+      loadCheckpoints();
+      showToast('检查点已删除');
+    } catch {
+      showToast('删除失败');
+    }
+  };
+
+  // ── 即将推出提示 ──
+  const handleComingSoon = (featureName: string) => {
+    setShowOptions(false);
+    setShowCheckpointMenu(false);
+    showToast(`"${featureName}" 功能正在开发中`);
+  };
+
   if (!chat) {
     return <div className="chat-room empty">聊天不存在</div>;
   }
@@ -641,8 +792,14 @@ const ChatRoom: React.FC = () => {
                 <button onClick={handleNewChat}>
                   <span>✏️</span> 开始新聊天
                 </button>
+                <button onClick={() => { setShowCfgScale(prev => !prev); setShowOptions(false); }}>
+                  <span>🎛️</span> {showCfgScale ? '隐藏 CFG 缩放' : 'CFG 缩放'}
+                </button>
                 <button onClick={() => { setShowAuthorsNote(prev => !prev); setShowOptions(false); }}>
                   <span>📝</span> {showAuthorsNote ? '隐藏作者注释' : '作者注释'}
+                </button>
+                <button onClick={handleToggleLogprobs}>
+                  <span>📊</span> {settings.generation.showLogprobs ? '隐藏 Token 概率' : 'Token 概率'}
                 </button>
                 <button onClick={handleMenuRegenerate} disabled={generating || chat.msgs.filter(m => !m.isUser).length === 0}>
                   <span>🔄</span> 重新生成
@@ -654,8 +811,54 @@ const ChatRoom: React.FC = () => {
                   <span>🎭</span> AI 帮答
                 </button>
                 <hr />
+                <button
+                  className="checkpoint-save-btn"
+                  onClick={() => { setShowCheckpointInput(true); setShowOptions(false); }}
+                >
+                  <span>💾</span> 保存检查点
+                </button>
+                <div className="checkpoint-load-wrapper">
+                  <button
+                    className="checkpoint-load-btn"
+                    onClick={() => setShowCheckpointMenu(prev => !prev)}
+                    disabled={checkpoints.length === 0}
+                  >
+                    <span>📂</span> 加载检查点 {checkpoints.length > 0 && `(${checkpoints.length})`}
+                  </button>
+                  {showCheckpointMenu && checkpoints.length > 0 && (
+                    <div className="checkpoint-submenu">
+                      {checkpoints.map(cp => (
+                        <div key={cp.key} className="checkpoint-item">
+                          <span
+                            className="checkpoint-item-name"
+                            onClick={() => handleLoadCheckpoint(cp.key)}
+                            title={cp.name}
+                          >
+                            {cp.name}
+                            <span className="checkpoint-item-time">
+                              {new Date(cp.timestamp).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric' })}
+                            </span>
+                          </span>
+                          <button
+                            className="btn-icon checkpoint-delete-btn"
+                            onClick={() => handleDeleteCheckpoint(cp.key)}
+                            title="删除"
+                          >✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <hr />
                 <button onClick={handleEnterMultiSelect}>
                   <span>🗑️</span> 删除消息
+                </button>
+                <hr />
+                <button onClick={() => handleComingSoon('返回到父级聊天')} disabled>
+                  <span>⬆️</span> 返回到父级聊天 <span className="coming-soon-tag">(即将推出)</span>
+                </button>
+                <button onClick={() => handleComingSoon('转换为群聊')} disabled>
+                  <span>👥</span> 转换为群聊 <span className="coming-soon-tag">(即将推出)</span>
                 </button>
                 <hr />
                 <button onClick={handleCloseChat}>
@@ -688,6 +891,55 @@ const ChatRoom: React.FC = () => {
             <div className="hotkey-item"><kbd>Ctrl+,</kbd><span>打开设置</span></div>
             <div className="hotkey-item"><kbd>/</kbd><span>聚焦输入框</span></div>
             <div className="hotkey-item"><kbd>Shift+?</kbd><span>显示/隐藏快捷键</span></div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Toast 通知 ── */}
+      {toast && (
+        <div className="toast-notification">
+          <span>{toast}</span>
+        </div>
+      )}
+
+      {/* ── CFG 缩放面板 ── */}
+      {showCfgScale && (
+        <div className="cfg-scale-panel">
+          <div className="cfg-scale-header">
+            <label>🎛️ CFG 缩放</label>
+            <div className="cfg-scale-value">{settings.generation.cfgScale ?? 1}</div>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="2"
+            step="0.05"
+            value={settings.generation.cfgScale ?? 1}
+            onChange={(e) => handleCfgScaleChange(parseFloat(e.target.value))}
+          />
+          <div className="cfg-scale-hint">
+            <span>0</span>
+            <span>1 (默认)</span>
+            <span>2</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── 检查点输入框 (inline) ── */}
+      {showCheckpointInput && (
+        <div className="checkpoint-input-area">
+          <div className="checkpoint-input-row">
+            <input
+              type="text"
+              className="checkpoint-name-input"
+              placeholder="输入检查点名称（可选）"
+              value={checkpointName}
+              onChange={(e) => setCheckpointName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSaveCheckpoint(); if (e.key === 'Escape') { setShowCheckpointInput(false); setCheckpointName(''); } }}
+              autoFocus
+            />
+            <button className="btn-sm btn-primary" onClick={handleSaveCheckpoint}>保存</button>
+            <button className="btn-sm btn-secondary" onClick={() => { setShowCheckpointInput(false); setCheckpointName(''); }}>取消</button>
           </div>
         </div>
       )}
@@ -740,6 +992,56 @@ const ChatRoom: React.FC = () => {
         )}
         <div ref={endRef} />
       </div>
+
+      {/* ── Token 概率面板 ── */}
+      {showLogprobsPanel && logprobData.length > 0 && (
+        <div className="logprobs-panel">
+          <div className="logprobs-header" onClick={() => setShowLogprobsPanel(false)}>
+            <span>📊 Token 概率 ({logprobData.length} tokens)</span>
+            <span className="logprobs-close">▼</span>
+          </div>
+          <div className="logprobs-content">
+            {logprobData.map((lp, idx) => {
+              // 概率颜色映射: logprob > 0 绿色, 0~-2 黄色, <-2 橙色, <-5 红色
+              const prob = Math.exp(lp.logprob);
+              const pct = Math.round(prob * 100);
+              let color = '#4CAF50'; // 高概率 绿
+              if (lp.logprob < -5) color = '#F44336'; // 很低 红
+              else if (lp.logprob < -2) color = '#FF9800'; // 低 橙
+              else if (lp.logprob < 0) color = '#FFEB3B'; // 中等 黄
+              const displayToken = lp.token.replace(/\n/g, '↵').replace(/ /g, '␣') || '(empty)';
+              return (
+                <div
+                  key={idx}
+                  className="logprob-token"
+                  style={{ color }}
+                  title={`token: "${lp.token}"\nlogprob: ${lp.logprob.toFixed(3)}\nprobability: ${pct}%${lp.topLogprobs.length > 0 ? '\n\nTop alternatives:\n' + lp.topLogprobs.slice(0, 3).map((t, i) => `  ${i+1}. "${t.token}" (${(Math.exp(t.logprob)*100).toFixed(1)}%)`).join('\n') : ''}`}
+                >
+                  <span className="logprob-token-text">{displayToken}</span>
+                  <span className="logprob-token-pct">{pct}%</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="logprobs-legend">
+            <span style={{ color: '#4CAF50' }}>高概率</span>
+            <span style={{ color: '#FFEB3B' }}>中等</span>
+            <span style={{ color: '#FF9800' }}>低概率</span>
+            <span style={{ color: '#F44336' }}>很低</span>
+          </div>
+        </div>
+      )}
+      {showLogprobsPanel && logprobData.length === 0 && (
+        <div className="logprobs-panel logprobs-empty">
+          <div className="logprobs-header" onClick={() => setShowLogprobsPanel(false)}>
+            <span>📊 Token 概率</span>
+            <span className="logprobs-close">▼</span>
+          </div>
+          <div className="logprobs-empty-msg">
+            {settings.generation.showLogprobs ? (generating ? '正在生成，等待数据...' : '当前 API 未返回概率数据，或需要重新发送消息以获取概率信息') : '请先在菜单中启用 Token 概率'}
+          </div>
+        </div>
+      )}
 
       {/* ── 作者注释区域 ── */}
       {showAuthorsNote && (

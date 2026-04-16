@@ -20,10 +20,17 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface LogprobData {
+  token: string;
+  logprob: number;
+  topLogprobs: { token: string; logprob: number }[];
+}
+
 export interface StreamCallbacks {
   onToken: (token: string) => void;
   onDone: (fullText: string) => void;
   onError: (error: Error) => void;
+  onLogprob?: (data: LogprobData) => void;
 }
 
 export interface AIServiceConfig {
@@ -38,6 +45,8 @@ export interface AIServiceConfig {
   presencePenalty?: number;
   systemPrompt?: string;
   proxyUrl?: string;  // 代理URL，如 http://127.0.0.1:10808
+  cfgScale?: number;       // CFG 缩放 (guidance_scale)
+  enableLogprobs?: boolean; // 启用 token 概率
 }
 
 // ==================== 模型列表 ====================
@@ -80,7 +89,8 @@ export const abortGeneration = () => {
 async function* streamOpenAICompatible(
   config: AIServiceConfig,
   messages: ChatMessage[],
-  signal: AbortSignal
+  signal: AbortSignal,
+  onLogprob?: (data: LogprobData) => void
 ): AsyncGenerator<string> {
   const url = `${config.apiUrl.replace(/\/$/, '')}/chat/completions`;
   const headers: Record<string, string> = {
@@ -100,6 +110,17 @@ async function* streamOpenAICompatible(
     presence_penalty: config.presencePenalty ?? 0,
     stream: true,
   };
+
+  // CFG 缩放 (guidance_scale) - 部分模型支持
+  if (config.cfgScale !== undefined && config.cfgScale !== 1) {
+    body.guidance_scale = config.cfgScale;
+  }
+
+  // Token 概率 (logprobs) - OpenAI 兼容 API
+  if (config.enableLogprobs) {
+    body.logprobs = true;
+    body.top_logprobs = 5;
+  }
 
   const fetchOptions: RequestInit = {
     method: 'POST',
@@ -146,6 +167,23 @@ async function* streamOpenAICompatible(
         const content = json.choices?.[0]?.delta?.content;
         if (content) {
           yield content;
+        }
+        // 解析 logprobs（graceful degradation：API 不支持时不报错）
+        if (onLogprob) {
+          const logprobs = json.choices?.[0]?.delta?.logprobs
+            || json.choices?.[0]?.logprobs;
+          if (logprobs?.token !== undefined) {
+            onLogprob({
+              token: logprobs.token || '',
+              logprob: logprobs.logprob ?? -Infinity,
+              topLogprobs: Array.isArray(logprobs.top_logprobs)
+                ? logprobs.top_logprobs.map((t: any) => ({
+                    token: t.token || '',
+                    logprob: t.logprob ?? -Infinity,
+                  }))
+                : [],
+            });
+          }
         }
       } catch {
         // 忽略解析错误
@@ -319,11 +357,11 @@ export async function streamChat(
         break;
       case 'openrouter':
         // OpenRouter 使用 OpenAI 兼容格式
-        stream = streamOpenAICompatible(config, messages, signal);
+        stream = streamOpenAICompatible(config, messages, signal, callbacks.onLogprob);
         break;
       case 'openai':
       default:
-        stream = streamOpenAICompatible(config, messages, signal);
+        stream = streamOpenAICompatible(config, messages, signal, callbacks.onLogprob);
         break;
     }
 
