@@ -34,7 +34,7 @@ type ContextMenuState = {
 
 const RolesPage: React.FC = () => {
   const navigate = useNavigate();
-  const { roles } = useStoreState();
+  const { roles, chats } = useStoreState();
   const [editingRole, setEditingRole] = useState<number | null>(null);
   const [creatingRole, setCreatingRole] = useState(false);
   const [search, setSearch] = useState('');
@@ -85,14 +85,13 @@ const RolesPage: React.FC = () => {
 
   // 统计每个角色关联的聊天数
   const chatCounts = useMemo(() => {
-    const { chats } = useStoreState() as any;
     if (!chats) return {};
     const counts: Record<number, number> = {};
     for (const chat of chats) {
       if (chat.roleId) counts[chat.roleId] = (counts[chat.roleId] || 0) + 1;
     }
     return counts;
-  }, [roles]);
+  }, [chats]);
 
   const handleCreateRole = () => {
     const newRoleId = addRole({
