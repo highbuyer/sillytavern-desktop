@@ -25,6 +25,7 @@ export type Chat = {
 export type Role = {
   id: number;
   name: string;
+  nickname?: string;            // 显示昵称（群聊/列表中可用）
   description: string;          // 角色描述（外观、性格、背景等）
   avatar: string;
   prompt: string;               // 系统提示词
@@ -32,6 +33,8 @@ export type Role = {
   temperature?: number;
   maxTokens?: number;
   topP?: number;
+  topK?: number;                // Top-K 采样
+  minP?: number;                // Min-P 采样
   frequencyPenalty?: number;
   presencePenalty?: number;
   // ── TavernAI V2/V3 扩展字段 ──
@@ -40,14 +43,26 @@ export type Role = {
   first_mes?: string;           // 首条问候语
   mes_example?: string;         // 示例对话（<START> 分隔）
   alternate_greetings?: string[]; // 备选问候语
+  group_only_greetings?: string[]; // 仅群聊使用的问候语
   system_prompt?: string;       // 角色专属系统提示词（覆盖全局）
   post_history_instructions?: string; // 角色专属后历史指令
   creator_notes?: string;       // 创作者注释（不注入 prompt）
   creator?: string;             // 创作者
   character_version?: string;   // 角色版本
+  create_date?: string;         // 角色卡创建日期（从 spec 导入）
   tags?: string[];              // 标签（用于筛选/排序）
   talkativeness?: number;       // 群聊活跃度 0-100
   fav?: boolean;                // 收藏/星标
+  // ── Depth Prompting ──
+  depth_prompt?: {
+    prompt: string;
+    depth: number;             // 注入深度（从底部倒数第几条）
+    role: number;              // 0=system, 1=user, 2=assistant
+  };
+  // ── 角色专属 ──
+  impersonation_prompt?: string; // 角色专属 AI 帮答提示词
+  character_book?: any;          // 角色专属世界书（V2/V3 spec）
+  extensions?: Record<string, any>; // 自由扩展字段
   // ── 时间戳 ──
   createdAt: string;
   updatedAt?: string;

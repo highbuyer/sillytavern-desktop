@@ -32,6 +32,7 @@ export interface TavernAIV2Card {
     topP?: number;
     frequencyPenalty?: number;
     presencePenalty?: number;
+    character_book?: any;
   };
 }
 
@@ -199,7 +200,7 @@ function extractCharaFromPNG(buffer: ArrayBuffer): ParsedCharacterCard | null {
 /**
  * 将任意格式的角色卡 JSON 标准化为统一格式
  */
-function normalizeCharacterCard(json: any): ParsedCharacterCard | null {
+export function normalizeCharacterCard(json: any): ParsedCharacterCard | null {
   if (!json || typeof json !== 'object') return null;
 
   // V3 格式
@@ -599,6 +600,170 @@ export function exportAllRoles(roles: Role[]): void {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+// ==================== PNG 导出 ====================
+
+/**
+ * 将角色卡导出为 PNG 图片（嵌入 chara 数据到 tEXt chunk）
+ * 与 SillyTavern 生态完全兼容
+ */
+export function exportRoleCardAsPNG(role: Role): void {
+  const card = roleToTavernCard(role);
+  // 更新扩展字段
+  if (role.depth_prompt) {
+    card.data.extensions = card.data.extensions || {};
+    card.data.extensions.depth_prompt = role.depth_prompt;
+  }
+  if (role.impersonation_prompt) {
+    card.data.extensions = card.data.extensions || {};
+    card.data.extensions.impersonation_prompt = role.impersonation_prompt;
+  }
+  if (role.nickname) {
+    card.data.extensions = card.data.extensions || {};
+    card.data.extensions.nickname = role.nickname;
+  }
+  if (role.group_only_greetings && role.group_only_greetings.length > 0) {
+    card.data.extensions = card.data.extensions || {};
+    card.data.extensions.group_only_greetings = role.group_only_greetings;
+  }
+  if (role.character_book) {
+    card.data.character_book = role.character_book;
+  }
+
+  const json = JSON.stringify(card);
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('无法创建 Canvas');
+
+  // 尝试从角色头像加载图片
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    ctx.drawImage(img, 0, 0);
+    downloadPNGFromCanvas(canvas, json, role.name);
+  };
+  img.onerror = () => {
+    // 头像加载失败，生成默认头像 PNG
+    const size = 512;
+    canvas.width = size;
+    canvas.height = size;
+    const colors = ['#5B3FD9', '#00CED1', '#FF6B6B', '#4CAF50', '#FF9800', '#E91E63', '#2196F3', '#9C27B0'];
+    const color = colors[role.name.charCodeAt(0) % colors.length];
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 256px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(role.name.charAt(0).toUpperCase(), size / 2, size / 2);
+    downloadPNGFromCanvas(canvas, json, role.name);
+  };
+  img.src = role.avatar;
+}
+
+/**
+ * 从 Canvas 生成 PNG 并嵌入 chara 数据后下载
+ */
+function downloadPNGFromCanvas(canvas: HTMLCanvasElement, charaData: string, name: string) {
+  // 将 JSON 编码为 base64
+  const utf8Bytes = new TextEncoder().encode(charaData);
+  let binary = '';
+  for (let i = 0; i < utf8Bytes.length; i++) {
+    binary += String.fromCharCode(utf8Bytes[i]);
+  }
+  const base64 = btoa(binary);
+
+  // 从 Canvas 获取 PNG blob
+  canvas.toBlob((blob) => {
+    if (!blob) throw new Error('PNG 生成失败');
+    const reader = new FileReader();
+    reader.onload = () => {
+      const buffer = reader.result as ArrayBuffer;
+      // 在 IEND chunk 之前插入 tEXt chunk
+      const modified = insertTEXtChunk(buffer, 'chara', base64);
+      const url = URL.createObjectURL(new Blob([modified], { type: 'image/png' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${name.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '_')}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    };
+    reader.readAsArrayBuffer(blob);
+  }, 'image/png');
+}
+
+/**
+ * 在 PNG 文件的 IEND chunk 之前插入一个 tEXt chunk
+ */
+function insertTEXtChunk(pngBuffer: ArrayBuffer, keyword: string, text: string): ArrayBuffer {
+  const view = new DataView(pngBuffer);
+  const bytes = new Uint8Array(pngBuffer);
+
+  // 找到 IEND chunk 的位置
+  let iendOffset = -1;
+  let offset = 8; // 跳过 PNG 签名
+  while (offset < bytes.length) {
+    const length = view.getUint32(offset);
+    const type = String.fromCharCode(bytes[offset + 4], bytes[offset + 5], bytes[offset + 6], bytes[offset + 7]);
+    if (type === 'IEND') {
+      iendOffset = offset;
+      break;
+    }
+    offset += 12 + length; // 4(length) + 4(type) + data + 4(CRC)
+  }
+  if (iendOffset === -1) throw new Error('无效的 PNG 文件');
+
+  // 构建 tEXt chunk: keyword\0text
+  const encoder = new TextEncoder();
+  const keywordBytes = encoder.encode(keyword);
+  const textBytes = encoder.encode(text);
+  const chunkData = new Uint8Array(keywordBytes.length + 1 + textBytes.length);
+  chunkData.set(keywordBytes);
+  chunkData[keywordBytes.length] = 0; // null separator
+  chunkData.set(textBytes, keywordBytes.length + 1);
+
+  // CRC: over type + data
+  const crcInput = new Uint8Array(4 + chunkData.length);
+  crcInput[0] = 0x74; // 't'
+  crcInput[1] = 0x45; // 'E'
+  crcInput[2] = 0x58; // 'X'
+  crcInput[3] = 0x74; // 't'
+  crcInput.set(chunkData, 4);
+  const crc = crc32(crcInput);
+
+  // 组装新 PNG
+  const before = bytes.slice(0, iendOffset);
+  const after = bytes.slice(iendOffset);
+  const newTextChunk = new Uint8Array(12 + chunkData.length);
+  new DataView(newTextChunk.buffer).setUint32(0, chunkData.length); // length
+  newTextChunk[4] = 0x74; newTextChunk[5] = 0x45; newTextChunk[6] = 0x58; newTextChunk[7] = 0x74; // 'tEXt'
+  newTextChunk.set(chunkData, 8);
+  new DataView(newTextChunk.buffer).setUint32(8 + chunkData.length, crc); // CRC
+
+  const result = new Uint8Array(before.length + newTextChunk.length + after.length);
+  result.set(before);
+  result.set(newTextChunk, before.length);
+  result.set(after, before.length + newTextChunk.length);
+  return result.buffer;
+}
+
+/**
+ * CRC32 计算（用于 PNG chunk CRC）
+ */
+function crc32(data: Uint8Array): number {
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < data.length; i++) {
+    crc ^= data[i];
+    for (let j = 0; j < 8; j++) {
+      crc = (crc >>> 1) ^ ((crc & 1) ? 0xEDB88320 : 0);
+    }
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
 }
 
 // ==================== 导入 ====================
