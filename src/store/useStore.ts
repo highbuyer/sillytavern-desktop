@@ -162,6 +162,8 @@ export type Settings = {
     topP: number;
     frequencyPenalty: number;
     presencePenalty: number;
+    authorsNote: string;
+    authorsNotePosition: 'before_last' | 'after_last';
   };
   ui: {
     theme: 'dark' | 'light' | 'auto';
@@ -215,6 +217,8 @@ const defaultSettings: Settings = {
     topP: 0.9,
     frequencyPenalty: 0.0,
     presencePenalty: 0.0,
+    authorsNote: '',
+    authorsNotePosition: 'before_last' as const,
   },
   ui: {
     theme: 'dark',

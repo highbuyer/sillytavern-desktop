@@ -2881,3 +2881,168 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ==================== 聊天选项菜单 & 作者注释 & 批量删除 ==================== */
+
+/* 聊天选项菜单 */
+.chat-options-menu {
+  position: relative;
+}
+
+.chat-options-panel {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 0;
+  min-width: 220px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  z-index: 100;
+}
+
+.chat-options-panel button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 16px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+
+.chat-options-panel button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.chat-options-panel button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.chat-options-panel hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 4px 0;
+}
+
+/* 作者注释区域 */
+.authors-note-area {
+  background: rgba(255, 255, 255, 0.03);
+  border-top: 1px solid var(--border);
+  padding: 10px 16px;
+}
+
+.authors-note-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.authors-note-header label {
+  font-size: 13px;
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.authors-note-area textarea {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 8px;
+  font-size: 13px;
+  resize: vertical;
+  min-height: 40px;
+  max-height: 120px;
+  font-family: inherit;
+  outline: none;
+}
+
+.authors-note-area textarea:focus {
+  border-color: var(--accent);
+}
+
+.authors-note-area select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+}
+
+.authors-note-area select:focus {
+  border-color: var(--accent);
+}
+
+/* 多选操作栏 */
+.multi-select-bar {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 16px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  z-index: 200;
+  font-size: 14px;
+}
+
+.multi-select-bar span {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+/* 消息多选 checkbox */
+.message-checkbox {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  z-index: 10;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+/* AI 帮答横幅 */
+.impersonate-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  margin: 8px 16px 0 16px;
+  background: rgba(91, 63, 217, 0.1);
+  border: 1px solid rgba(91, 63, 217, 0.3);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.impersonate-banner button {
+  font-family: inherit;
+}
+
+/* 菜单禁用态 */
+.btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
