@@ -101,6 +101,32 @@ export type WorldBook = {
   entries: WorldInfoEntry[];
 };
 
+// ── 扩展程序类型 ──
+export type ExtensionId =
+  | 'regex'
+  | 'memory'
+  | 'summarize'
+  | 'tts'
+  | 'caption'
+  | 'translate'
+  | 'expressions'
+  | 'quick-reply'
+  | 'stable-diffusion'
+  | 'token-counter'
+  | 'vectors'
+  | 'connection-manager';
+
+export type ExtensionDefinition = {
+  id: ExtensionId;
+  name: string;
+  description: string;
+  icon: string;
+  category: 'built-in' | 'third-party';
+  version: string;
+};
+
+export type ExtensionSettings = Record<ExtensionId, Record<string, any>>;
+
 const defaultWorldInfoSettings: WorldInfoSettings = {
   globalTokenBudget: 0,
   scanScope: {
@@ -320,6 +346,25 @@ const createStore = () => {
     localStorage.removeItem('sillytavern-worldinfo');
   }
 
+  // ── 扩展程序状态 ──
+  const defaultExtensionSettings: ExtensionSettings = {
+    'regex': {},
+    'memory': {},
+    'summarize': { maxTokens: 500, triggerInterval: 10 },
+    'tts': { provider: 'browser', voice: 'default', autoPlay: false },
+    'caption': { provider: 'openai', model: 'gpt-4o-mini' },
+    'translate': { provider: 'google', sourceLang: 'auto', targetLang: 'zh-CN' },
+    'expressions': { spriteFolder: '', defaultExpression: 'neutral' },
+    'quick-reply': {},
+    'stable-diffusion': { provider: 'local', endpoint: '', model: '' },
+    'token-counter': { backend: 'tiktoken' },
+    'vectors': { provider: 'openai', model: 'text-embedding-3-small' },
+    'connection-manager': {},
+  };
+
+  const loadedExtensionEnabled = loadFromStorage<Record<string, boolean>>('sillytavern-extensions-enabled', {});
+  const loadedExtensionSettings = loadFromStorage<ExtensionSettings>('sillytavern-extensions-settings', defaultExtensionSettings);
+
   let state = {
     chats: loadFromStorage<Chat[]>('sillytavern-chats', initialChats),
     roles: loadFromStorage<Role[]>('sillytavern-roles', defaultRoles),
@@ -327,6 +372,8 @@ const createStore = () => {
     worldBooks: loadedWorldBooks,
     activeWorldBook: loadedActiveWorldBook,
     worldInfoSettings: loadFromStorage<WorldInfoSettings>('sillytavern-worldinfo-settings', defaultWorldInfoSettings),
+    extensionEnabled: loadedExtensionEnabled,
+    extensionSettings: loadedExtensionSettings,
   };
 
   const subscribe = (fn: (state: any) => void) => {
@@ -342,6 +389,8 @@ const createStore = () => {
       ...state,
       worldBooks: state.worldBooks ? { ...state.worldBooks } : state.worldBooks,
       worldInfoSettings: { ...state.worldInfoSettings },
+      extensionEnabled: { ...state.extensionEnabled },
+      extensionSettings: { ...state.extensionSettings },
     };
     subscribers.forEach((fn) => fn(newState));
     // 自动保存到localStorage
@@ -352,6 +401,8 @@ const createStore = () => {
       saveToStorage('sillytavern-worldbooks', state.worldBooks);
       saveToStorage('sillytavern-active-worldbook', state.activeWorldBook);
       saveToStorage('sillytavern-worldinfo-settings', state.worldInfoSettings);
+      saveToStorage('sillytavern-extensions-enabled', state.extensionEnabled);
+      saveToStorage('sillytavern-extensions-settings', state.extensionSettings);
     }
   };
 
@@ -624,15 +675,33 @@ const createStore = () => {
       worldBooks: state.worldBooks,
       activeWorldBook: state.activeWorldBook,
       worldInfoSettings: state.worldInfoSettings,
+      extensionEnabled: state.extensionEnabled,
+      extensionSettings: state.extensionSettings,
     }),
     
-    importData: (data: { chats?: Chat[]; roles?: Role[]; settings?: Settings; worldBooks?: Record<string, WorldBook>; activeWorldBook?: string; worldInfoSettings?: WorldInfoSettings }) => {
+    importData: (data: { chats?: Chat[]; roles?: Role[]; settings?: Settings; worldBooks?: Record<string, WorldBook>; activeWorldBook?: string; worldInfoSettings?: WorldInfoSettings; extensionEnabled?: Record<string, boolean>; extensionSettings?: ExtensionSettings }) => {
       if (data.chats) state.chats = data.chats;
       if (data.roles) state.roles = data.roles;
       if (data.settings) state.settings = data.settings;
       if (data.worldBooks) state.worldBooks = data.worldBooks;
       if (data.activeWorldBook !== undefined) state.activeWorldBook = data.activeWorldBook;
       if (data.worldInfoSettings) state.worldInfoSettings = data.worldInfoSettings;
+      if (data.extensionEnabled) state.extensionEnabled = data.extensionEnabled;
+      if (data.extensionSettings) state.extensionSettings = data.extensionSettings;
+      notify();
+    },
+
+    // ── Extension Management ──
+    setExtensionEnabled: (extId: string, enabled: boolean) => {
+      state.extensionEnabled = { ...state.extensionEnabled, [extId]: enabled };
+      notify();
+    },
+
+    updateExtensionSettings: (extId: string, updates: Record<string, any>) => {
+      state.extensionSettings = {
+        ...state.extensionSettings,
+        [extId]: { ...(state.extensionSettings[extId] || {}), ...updates },
+      };
       notify();
     },
   };
@@ -645,6 +714,7 @@ export const {
   getActiveWorldInfo, createWorldBook, deleteWorldBook, renameWorldBook, duplicateWorldBook,
   setActiveWorldBook, getWorldBookNames, importWorldBook,
   addWorldInfoEntry, updateWorldInfoEntry, deleteWorldInfoEntry, reorderWorldInfo, updateWorldInfoSettings,
+  setExtensionEnabled, updateExtensionSettings,
 } = store;
 
 // 兼容旧版API

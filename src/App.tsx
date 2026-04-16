@@ -7,6 +7,7 @@ import SettingsPage from './pages/SettingsPage';
 import RolesPage from './pages/RolesPage';
 import ChatSettingsPage from './pages/ChatSettingsPage';
 import WorldInfoPage from './pages/WorldInfoPage';
+import ExtensionsPage from './pages/ExtensionsPage';
 import './App.css';
 
 const MainLayout: React.FC = () => {
@@ -31,6 +32,7 @@ const MainLayout: React.FC = () => {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/roles" element={<RolesPage />} />
           <Route path="/worldinfo" element={<WorldInfoPage />} />
+          <Route path="/extensions" element={<ExtensionsPage />} />
           <Route 
             path="/" 
             element={

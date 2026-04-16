@@ -2565,3 +2565,313 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
     gap: 10px;
   }
 }
+
+/* ─── 扩展程序页面 ─── */
+.ext-page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ext-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+/* 过滤按钮组 */
+.ext-filter-group {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.ext-filter-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.ext-filter-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.ext-filter-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* 扩展卡片列表 */
+.ext-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ext-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: all 0.15s;
+  gap: 16px;
+}
+
+.ext-card:hover {
+  border-color: var(--border-hover);
+  background: var(--bg-hover);
+}
+
+.ext-card-enabled {
+  border-left: 3px solid var(--accent);
+}
+
+.ext-card-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+}
+
+.ext-icon {
+  font-size: 28px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.ext-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.ext-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.ext-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ext-meta {
+  margin-top: 6px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ext-version {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-primary);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.ext-category {
+  font-size: 11px;
+  color: var(--accent);
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(91, 63, 217, 0.1);
+}
+
+.ext-card-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.ext-settings-btn {
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+
+.ext-card:hover .ext-settings-btn {
+  opacity: 1;
+}
+
+/* 扩展设置面板 */
+.ext-settings-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.ext-settings-panel {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 520px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.ext-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ext-settings-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.ext-settings-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.ext-settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ext-settings-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ext-settings-row label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.ext-settings-row input[type="text"],
+.ext-settings-row input[type="number"],
+.ext-settings-row select {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.ext-settings-row input:focus,
+.ext-settings-row select:focus {
+  border-color: var(--accent);
+}
+
+.ext-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.ext-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 6px 0;
+}
+
+.ext-toggle-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.ext-info-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  padding: 12px;
+  background: var(--bg-primary);
+  border-radius: 8px;
+  border-left: 3px solid var(--accent);
+}
+
+/* 第三方安装区域 */
+.ext-install-section {
+  padding: 16px 24px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-primary);
+}
+
+.ext-install-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.ext-install-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.ext-install-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.ext-install-input {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+
+.ext-install-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
