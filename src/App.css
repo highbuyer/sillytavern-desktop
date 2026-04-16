@@ -369,13 +369,25 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
   border-radius: 6px;
   padding: 6px 12px;
   color: var(--text);
   cursor: pointer;
   font-size: 14px;
+  transition: all 0.2s;
+  outline: none;
+}
+
+.role-selector-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--border);
+}
+
+.role-selector-toggle:focus-visible {
+  border-color: var(--accent, #5B3FD9);
+  box-shadow: 0 0 0 2px rgba(91, 63, 217, 0.2);
 }
 
 .role-avatar {
@@ -423,11 +435,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 }
 
 .role-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .role-item.selected {
-  background: rgba(91, 63, 217, 0.1);
+  background: rgba(91, 63, 217, 0.15);
+  border-left: 3px solid #5B3FD9;
 }
 
 .role-info {
